@@ -1,8 +1,8 @@
 package kyulab.postservice;
 
-import kyulab.postservice.dto.req.PostCreateReqDTO;
-import kyulab.postservice.dto.req.PostUpdateReqDTO;
-import kyulab.postservice.dto.res.PostDeatilResDTO;
+import kyulab.postservice.dto.req.PostCreateReqDto;
+import kyulab.postservice.dto.req.PostUpdateReqDto;
+import kyulab.postservice.dto.res.PostResDto;
 import kyulab.postservice.service.PostService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -21,7 +21,7 @@ class PostServiceApplicationTests {
 	@BeforeEach
 	@DisplayName("테스트전 게시글 생성")
 	void setUp() {
-		PostCreateReqDTO reqDTO = new PostCreateReqDTO(1L, "제목", "본문");
+		PostCreateReqDto reqDTO = new PostCreateReqDto(1L, "제목", "본문");
 		postService.savePost(reqDTO);
 	}
 	
@@ -34,9 +34,10 @@ class PostServiceApplicationTests {
 	@Test
 	@DisplayName("게시글 업데이트")
 	void update() {
-		PostUpdateReqDTO reqDTO = new PostUpdateReqDTO("제목변경", "본문변경");
-		PostDeatilResDTO resDTO = postService.updatePost(1L, reqDTO);
-		assertEquals(reqDTO.subject(), resDTO.subject());
+		PostUpdateReqDto reqDTO = new PostUpdateReqDto("제목변경", "본문변경");
+		PostResDto resDTO = postService.updatePost(1L, reqDTO);
+		assertEquals(reqDTO.subject(), resDTO.postDetail().subject());
 	}
+
 
 }

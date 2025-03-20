@@ -1,15 +1,9 @@
 # 필요에 따라 수정
-server:
-  port: 8001
 spring:
   cloud:
     config:
       enabled: false
-  application:
-    name: users-service
   datasource:
-    url: jdbc:postgresql://localhost:5432/post-service
-    driver-class-name: org.postgresql.Driver
     hikari:
       username: postgres
       password: 1234
@@ -17,13 +11,12 @@ spring:
     database-platform: org.hibernate.dialect.PostgreSQLDialect
     hibernate:
       ddl-auto: update
-    show-sql: true
     properties:
       hibernate:
         format_sql: true
 eureka:
   client:
     enabled: false
-logging:
-  level:
-    org.springframework.boot.context.config: TRACE
+gateway:
+  url: http://localhost:8000
+  key: ZGtzb2FmamRhc3BvZmphZHdzZjtsa2prbGohQCNAKClfKmpA
