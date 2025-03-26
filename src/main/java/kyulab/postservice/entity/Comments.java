@@ -1,6 +1,7 @@
 package kyulab.postservice.entity;
 
 import jakarta.persistence.*;
+import kyulab.postservice.domain.ContentStatus;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -20,6 +21,7 @@ public class Comments {
 	@GeneratedValue(strategy = GenerationType.SEQUENCE)
 	private Long id;
 
+	@Column(nullable = false)
 	private Long userId;
 
 	@Column(columnDefinition = "TEXT")
@@ -31,6 +33,9 @@ public class Comments {
 	)
 	private Post post;
 
+	@Enumerated(EnumType.STRING)
+	private ContentStatus status;
+
 	@CreatedDate
 	@Column(updatable = false)
 	private LocalDateTime createdAt;
@@ -41,6 +46,7 @@ public class Comments {
 	public Comments(Long userId, String content) {
 		this.userId = userId;
 		this.content = content;
+		this.status = ContentStatus.NORMAL;
 	}
 
 	public void setContent(String content) {
@@ -49,6 +55,10 @@ public class Comments {
 
 	public void setPost(Post post) {
 		this.post = post;
+	}
+
+	public void setStatus(ContentStatus status) {
+		this.status = status;
 	}
 
 }

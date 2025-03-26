@@ -1,4 +1,9 @@
 package kyulab.postservice.dto.req;
 
-public record PostUpdateReqDto(String subject, String content) {
+public record PostUpdateReqDto(
+		Long userId,
+		Long postId,
+		Long groupId,
+		String subject,
+		String content) {
 }

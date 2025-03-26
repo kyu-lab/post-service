@@ -1,41 +1,57 @@
 package kyulab.postservice.service;
 
+import kyulab.postservice.domain.ContentStatus;
+import kyulab.postservice.domain.group.GroupUsersStatus;
+import kyulab.postservice.dto.gateway.UsersList;
+import kyulab.postservice.dto.gateway.UsersResDto;
 import kyulab.postservice.dto.req.PostCreateReqDto;
 import kyulab.postservice.dto.req.PostUpdateReqDto;
 import kyulab.postservice.dto.res.*;
+import kyulab.postservice.entity.Groups;
+import kyulab.postservice.entity.GroupUsers;
 import kyulab.postservice.entity.Post;
-import kyulab.postservice.handler.exception.BadRequestException;
+import kyulab.postservice.entity.PostView;
+import kyulab.postservice.entity.key.PostViewId;
+import kyulab.postservice.handler.exception.NotFoundException;
+import kyulab.postservice.handler.exception.UnauthorizedAccessException;
+import kyulab.postservice.repository.CommentRepository;
 import kyulab.postservice.repository.PostRepository;
+import kyulab.postservice.repository.PostViewRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.client.HttpClientErrorException;
-import org.springframework.web.client.HttpServerErrorException;
-import org.springframework.web.client.RestTemplate;
+import org.springframework.util.StringUtils;
 
+import java.net.URI;
 import java.util.List;
+import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class PostService {
 
+	private final GroupService groupService;
+	private final UsersGatewayService usersGatewayService;
 	private final PostRepository postRepository;
-	private final RestTemplate restTemplate;
-
-	@Value("${gateway.url:}")
-	private String gateway;
-
-	@Value("${gateway.user-path:}")
-	private String userPath;
+	private final CommentRepository commentRepository;
+	private final PostViewRepository postViewRepository;
 
 	@Transactional(readOnly = true)
-	public PostListResDto getPosts(Long cursor) {
-		int limit = 10; // 현재 목록은 10개만 가져오도록 고정함
+	public Post getPost(Long id) {
+		return postRepository.findById(id)
+				.orElseThrow(() -> {
+					log.info("Post {} Not Found", id);
+					return new NotFoundException("Post Not Found");
+				});
+	}
+
+	@Transactional(readOnly = true)
+	public List<Post> getPosts(Long cursor, Integer limit) {
 		PageRequest pageable = PageRequest.of(0, limit + 1); // 1을 더해 다음 데이터가 있는지 확인
 
 		List<Post> posts = cursor == null
@@ -43,79 +59,168 @@ public class PostService {
 				: postRepository.findPostsByCursor(cursor, pageable);
 
 		// 실제 반환할 데이터는 limit까지만
-		boolean hasMore = posts.size() > limit;
-		List<Post> postsToReturn = posts.size() > limit ? posts.subList(0, limit) : posts;
-		
-		// 게시글에 포함된 사용자 정보를 합치기 위해 사용자 서비스에 요청
-		List<PostSummaryResDto> postList = postsToReturn.stream().map(post -> {
-			UsersResDto user = restTemplate.getForObject(gateway + userPath + post.getUserId(), UsersResDto.class);
+		return posts.size() > limit ? posts.subList(0, limit) : posts;
+	}
+
+	/**
+	 * 게시글 목록을 가져온다.
+	 * @param cursor 현재 커서 위치
+	 * @return 게시글 목록
+	 */
+	@Transactional(readOnly = true)
+	public PostListResDto getPostSummaryList(Long cursor) {
+		int limit = 10;
+		List<Post> posts = getPosts(cursor, limit);
+
+		// 사용자 아이디를 중복되지 않게 추출한다.
+		Set<Long> userIds = posts.stream()
+				.map(Post::getUserId)
+				.collect(Collectors.toSet());
+		UsersList usersList = usersGatewayService.requestGetUserInfos(userIds);
+
+		List<PostSummaryResDto> postList = posts.stream().map(post -> {
+			UsersResDto user = usersList.userList().stream()
+					.filter(u -> Objects.equals(u.id(), post.getUserId()))
+					.findFirst()
+					.orElse(new UsersResDto(0L, "삭제된 사용자"));
+			long viewCount = postViewRepository.countByIdPostId(post.getId());
+			long commentCount = getCommentsCount(post.getId());
 			return new PostSummaryResDto(
 					user,
 					post.getId(),
 					post.getSummary(),
-					post.getComments().size(),
+					viewCount,
+					commentCount,
 					post.getCreatedAt()
 			);
 		}).toList();
-		Long nextCursor = postsToReturn.isEmpty() ? null : postsToReturn.get(postsToReturn.size() - 1).getId();
+
+		// 다음 게시글이 있는지 확인한다.
+		boolean hasMore = posts.size() > limit;
+		Long nextCursor = postList.isEmpty() ? null : postList.get(postList.size() - 1).postId();
 		return new PostListResDto(postList, nextCursor, hasMore);
 	}
 
 	@Transactional(readOnly = true)
-	public PostResDto getPost(Long id) {
-		Post post = postRepository.findById(id)
-				.orElseThrow(() -> {
-					log.info("Post {} Not Found", id);
-					return new BadRequestException("Post Not Found");
-				});
+	public PostResDto getPostDetail(Long postId) {
+		Post post = getPost(postId);
+		UsersResDto usersInfo = usersGatewayService.requestGetUserInfo(postId);
+		if (isNotReadPost(postId, usersInfo.id())) {
+			increaseViewCount(postId, usersInfo.id());
+		}
+		long viewCount = getViewCount(postId);
+		return new PostResDto(usersInfo, PostDetailResDto.from(post, viewCount));
+	}
 
-		// 게시글에 포함된 사용자 정보를 합치기 위해 사용자 서비스에 요청
-		String userServiceUrl = gateway + userPath + post.getUserId();
-		UsersResDto usersInfo;
-		try {
-			usersInfo = restTemplate.getForObject(userServiceUrl, UsersResDto.class);
-		} catch (HttpClientErrorException h) {
-			log.error("users-service와 연결 안됨 : {}", h.getMessage());
-			throw new HttpClientErrorException(HttpStatus.SERVICE_UNAVAILABLE, "users-service와 연결 안됨");
-		} catch (Exception e) {
-			log.error("user-service와 통신 에러 : {}", e.getMessage());
-			throw new HttpServerErrorException(HttpStatus.INTERNAL_SERVER_ERROR, "통신외 에러가 발생했습니다.");
+	@Transactional
+	public void increaseViewCount(Long postId, Long userId) {
+		PostViewId postViewId = new PostViewId(postId, userId);
+		postViewRepository.save(new PostView(postViewId));
+	}
+
+	@Transactional(readOnly = true)
+	public boolean isNotReadPost(Long postId, Long userId) {
+		PostViewId postViewId = new PostViewId(postId, userId);
+		return postViewRepository.existsById(postViewId);
+	}
+
+	@Transactional(readOnly = true)
+	public long getViewCount(Long postId) {
+		return postViewRepository.countByIdPostId(postId);
+	}
+
+	@Transactional(readOnly = true)
+	public long getCommentsCount(Long postId) {
+		return commentRepository.countByPostId(postId);
+	}
+
+	@Transactional
+	public URI savePost(PostCreateReqDto createReqDTO) {
+		if (groupService.isWriteRestricted(createReqDTO.groupId(), createReqDTO.userId())) {
+			throw new UnauthorizedAccessException("write denied");
 		}
 
-		// 댓글에 포함된 사용자 정보를 합치기 위해 사용자 서비스에 요청
-		List<CommentResDto> commentList = post.getComments().stream().map(comment -> {
-			UsersResDto user = restTemplate.getForObject(gateway + userPath + comment.getUserId(), UsersResDto.class);
-			return new CommentResDto(
-					user.id(),
-					user.name(),
-					comment.getContent(),
-					comment.getCreatedAt()
-			);
-		}).toList();
+		Groups groups = groupService.getGroup(createReqDTO.groupId());
+		GroupUsers groupUser = groups.getGroupUsers().stream()
+				.filter(groupUsers -> groupUsers.getId().getUserId().equals(createReqDTO.userId()))
+				.findFirst()
+				.orElseThrow(() -> {
+					log.info("User : {}, Not Groups user", createReqDTO.userId());
+					return new UnauthorizedAccessException("write denied");
+				});
 
-		return new PostResDto(usersInfo, PostDetailResDto.from(post), commentList);
+		// 정지 또는 승인 대기 중인 사용자는 작성 금지
+		if (groupUser.getStatus() == GroupUsersStatus.BAN ||
+				groupUser.getStatus() == GroupUsersStatus.PENDING) {
+			throw new UnauthorizedAccessException("write denied");
+		}
+
+		Post post = createPost(createReqDTO);
+		groups.addPostInGroup(post);
+		return URI.create("/post/" + postRepository.save(post).getId());
 	}
 
 	@Transactional
-	public Long savePost(PostCreateReqDto createReqDTO) {
-		Post post = new Post(
+	public Post createPost(PostCreateReqDto createReqDTO) {
+		return new Post(
 				createReqDTO.userId(),
 				createReqDTO.subject(),
-				createReqDTO.content()
+				createReqDTO.content(),
+				extractSummary(createReqDTO.content())
 		);
-		return postRepository.save(post).getId();
 	}
 
 	@Transactional
-	public PostResDto updatePost(Long id, PostUpdateReqDto updateReqDTO) {
-		Post post = postRepository.findById(id)
+	public URI updatePost(PostUpdateReqDto updateReqDTO) {
+		if (groupService.isWriteRestricted(updateReqDTO.groupId(), updateReqDTO.userId())) {
+			throw new UnauthorizedAccessException("write denied");
+		}
+		Post post = postRepository.findPostByIdAndStatusNot(updateReqDTO.postId(), ContentStatus.DELETE)
 				.orElseThrow(() -> {
-					log.info("Post {} Not Found", id);
-					return new BadRequestException("Post Not Found");
+					log.info("Post {} Not Found", updateReqDTO.postId());
+					return new NotFoundException("Post Not Found");
 				});
 		post.setSubject(updateReqDTO.subject());
 		post.setContent(updateReqDTO.content());
-		return getPost(id);
+
+		return URI.create("/post/" + post.getId());
+	}
+
+	/**
+	 * 본문 글에서 글자를 추출해 짧은 요약글로 만든다.
+	 * @param content 본문
+	 * @return 요약글
+	 */
+	private String extractSummary(String content) {
+		if (!StringUtils.hasText(content)) {
+			return "";
+		}
+
+		// 1. <br> 또는 <br/>를 줄바꿈(\n)으로 변환
+		String withBreaks = content.replaceAll("(?i)<br\\s*/?>", "\n");
+
+		// 2. 나머지 HTML 태그 제거 및 100자 이상은 잘라버린다.
+		String plainText = withBreaks.replaceAll("<[^>]+>", "").trim();
+
+		// 3. 줄 단위로 나누기
+		String[] lines = plainText.split("\n");
+
+		// 4. 3줄까지만 취하기
+		int maxLines = Math.min(lines.length, 3);
+		StringBuilder summary = new StringBuilder();
+		for (int i = 0; i < maxLines; i++) {
+			summary.append(lines[i].trim());
+			if (i < maxLines - 1) {
+				summary.append("\n"); // 줄바꿈 유지
+			}
+		}
+
+		// 5. 3줄 이상이었으면 "..." 추가
+		if (lines.length > 3) {
+			summary.append("...");
+		}
+
+		return summary.toString();
 	}
 
 }

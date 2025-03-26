@@ -1,12 +1,14 @@
 package kyulab.postservice.entity;
 
 import jakarta.persistence.*;
+import kyulab.postservice.domain.ContentStatus;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
+import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -22,8 +24,13 @@ public class Post {
 	@GeneratedValue(strategy = GenerationType.SEQUENCE)
 	private Long id;
 
+	@Column(nullable = false)
 	private Long userId;
 
+	@Column(
+		nullable = false,
+		length = 100
+	)
 	private String subject;
 
 	@Column(columnDefinition = "TEXT")
@@ -37,6 +44,12 @@ public class Post {
 	)
 	private List<Comments> comments = new ArrayList<>();
 
+	@Enumerated(EnumType.STRING)
+	private ContentStatus status;
+
+	@ManyToOne(fetch = FetchType.LAZY)
+	private Groups groups;
+
 	@CreatedDate
 	@Column(updatable = false)
 	private LocalDateTime createdAt;
@@ -44,11 +57,12 @@ public class Post {
 	@LastModifiedDate
 	private LocalDateTime modifiedAt;
 
-	public Post(Long userId, String subject, String content) {
+	public Post(Long userId, String subject, String content, String summary) {
 		this.userId = userId;
 		this.subject = subject;
 		this.content = content;
-		this.summary = extractSummary(content);
+		this.summary = summary;
+		this.status = ContentStatus.NORMAL;
 	}
 
 	public void setSubject(String subject) {
@@ -59,15 +73,17 @@ public class Post {
 		this.content = content;
 	}
 
+	public void setStatus(ContentStatus status) {
+		this.status = status;
+	}
+
 	public void addComments(Comments comments) {
 		this.comments.add(comments);
 		comments.setPost(this);
 	}
 
-	// HTML 태그 제거 후 요약본만 추출한다
-	private String extractSummary(String content) {
-		String plainText = this.content.replaceAll("<[^>]+>", "").trim();
-		return plainText.length() > 100 ? plainText.substring(0, 100) + "..." : plainText;
+	public void setGroups(Groups groups) {
+		this.groups = groups;
 	}
 
 }
