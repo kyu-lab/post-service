@@ -1,6 +1,6 @@
 version: '3.8'
 services:
-  users-service:
+  post-service:
     image: post-service:latest
     build:
       context: .
@@ -9,8 +9,7 @@ services:
       - "8002:8002"
     environment:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/post-service
-      - CONFIG_SERVER_URL=http://172.17.0.1:8888
-      - DISCOVERY_SERVER_URL=http://172.17.0.1:8761/eureka/
+      - CONFIG_SERVER_URL=http://www.writehere.kro.kr:8888
     depends_on:
       - postgres
     networks:
@@ -18,7 +17,7 @@ services:
   postgres:
     image: postgres:15
     environment:
-      - POSTGRES_DB=users-service
+      - POSTGRES_DB=post-service
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=1234
     ports:

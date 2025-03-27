@@ -49,7 +49,7 @@ public class CommentService {
 		Set<Long> userIds = commentsList.stream()
 				.map(Comments::getUserId)
 				.collect(Collectors.toSet());
-		UsersList usersList = usersGatewayService.requestGetUserInfos(userIds);
+		UsersList usersList = usersGatewayService.requestUserInfos(userIds);
 
 		return commentsList.stream().map(comment -> {
 			UsersResDto user = usersList.userList().stream()
