@@ -4,8 +4,5 @@ FROM openjdk:17-jdk-slim
 # 작업 디렉토리 설정
 WORKDIR /app
 
-# JAR 파일을 컨테이너로 복사
-COPY build/libs/post-service.jar post-service.jar
-
 # 실행 명령어
 ENTRYPOINT ["java", "-jar", "post-service.jar", "--spring.profiles.active=prod"]
