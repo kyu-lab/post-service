@@ -34,7 +34,7 @@ public class UsersGatewayService {
 	 * @param userIds 요청할 사용자 정보 목록
 	 * @return 사용자 정보 목록
 	 */
-	public UsersList requestGetUserInfos(Set<Long> userIds) {
+	public UsersList requestUserInfos(Set<Long> userIds) {
 		HttpEntity<Set<Long>> request = new HttpEntity<>(userIds);
 		return restTemplate.exchange(
 				gateway + userPath,
@@ -49,7 +49,7 @@ public class UsersGatewayService {
 	 * @param userId 요청할 사용자 정보
 	 * @return 사용자 정보 목록
 	 */
-	public UsersResDto requestGetUserInfo(Long userId) {
+	public UsersResDto requestUserInfo(Long userId) {
 		String userServiceUrl = gateway + userPath + "/" + userId;
 		try {
 			return restTemplate.getForObject(userServiceUrl, UsersResDto.class);

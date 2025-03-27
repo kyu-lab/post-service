@@ -76,7 +76,7 @@ public class PostService {
 		Set<Long> userIds = posts.stream()
 				.map(Post::getUserId)
 				.collect(Collectors.toSet());
-		UsersList usersList = usersGatewayService.requestGetUserInfos(userIds);
+		UsersList usersList = usersGatewayService.requestUserInfos(userIds);
 
 		List<PostSummaryResDto> postList = posts.stream().map(post -> {
 			UsersResDto user = usersList.userList().stream()
@@ -104,7 +104,7 @@ public class PostService {
 	@Transactional(readOnly = true)
 	public PostResDto getPostDetail(Long postId) {
 		Post post = getPost(postId);
-		UsersResDto usersInfo = usersGatewayService.requestGetUserInfo(postId);
+		UsersResDto usersInfo = usersGatewayService.requestUserInfo(postId);
 		if (isNotReadPost(postId, usersInfo.id())) {
 			increaseViewCount(postId, usersInfo.id());
 		}
