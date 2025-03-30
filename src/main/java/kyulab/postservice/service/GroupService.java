@@ -14,6 +14,7 @@ import kyulab.postservice.handler.exception.NotFoundException;
 import kyulab.postservice.handler.exception.UnauthorizedAccessException;
 import kyulab.postservice.repository.GroupUsersRepsitory;
 import kyulab.postservice.repository.GroupRepository;
+import kyulab.postservice.utils.UserContext;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -31,7 +32,14 @@ public class GroupService {
 	private final GroupUsersRepsitory groupUsersRepsitory;
 
 	@Transactional(readOnly = true)
-	public List<GroupResDto> getGroupList(Long userId) {
+	public List<GroupResDto> getGroupList() {
+		long userId;
+		try {
+			userId = UserContext.getUserId();
+ 		} catch (Exception e) {
+			log.warn("Token required");
+			throw new UnauthorizedAccessException("Token required");
+		}
 		return groupUsersRepsitory.findByIdUserId(userId).stream()
 				.map(GroupUsers::getGroups)
 				.map(GroupResDto::from)
@@ -89,7 +97,7 @@ public class GroupService {
 
 		Groups newGroups = groupRepository.save(new Groups(createReqDTO));
 		GroupUsers newGroupUsers = new GroupUsers(
-				new GroupUserId(createReqDTO.userId(), newGroups.getId())
+				new GroupUserId(UserContext.getUserId(), newGroups.getId())
 		);
 		newGroups.addGroupUsers(newGroupUsers);
 		groupUsersRepsitory.save(newGroupUsers);
@@ -105,7 +113,7 @@ public class GroupService {
 
 		Groups userGroup = groupRepository.save(new Groups(createReqDTO));
 		GroupUsers newGroupUsers = new GroupUsers(
-			new GroupUserId(createReqDTO.userId(), userGroup.getId())
+			new GroupUserId(UserContext.getUserId(), userGroup.getId())
 		);
 
 		userGroup.addGroupUsers(newGroupUsers);
@@ -125,10 +133,11 @@ public class GroupService {
 					return new NotFoundException("Groups Not Found");
 				});
 
-		GroupUserId groupUserId = new GroupUserId(updateReqDto.groupId(), updateReqDto.userId());
+		long userId = UserContext.getUserId();
+		GroupUserId groupUserId = new GroupUserId(updateReqDto.groupId(), userId);
 		GroupUsers groupUsers = groupUsersRepsitory.findById(groupUserId)
 				.orElseThrow(() -> {
-					log.info("User {} Not Found", updateReqDto.userId());
+					log.info("User {} Not Found", userId);
 					return new NotFoundException("User Not Found");
 				});
 

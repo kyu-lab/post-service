@@ -10,6 +10,7 @@ import kyulab.postservice.entity.Post;
 import kyulab.postservice.handler.exception.NotFoundException;
 import kyulab.postservice.handler.exception.UnauthorizedAccessException;
 import kyulab.postservice.repository.CommentRepository;
+import kyulab.postservice.utils.UserContext;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
@@ -37,7 +38,7 @@ public class CommentService {
 	}
 
 	@Transactional(readOnly = true)
-	public List<CommentResDto> getCommentsWithUserInfo(Long postId) {
+	public List<CommentResDto> getCommentsWithUserInfo(long postId) {
 		List<Comments> commentsList = getComments(postId);
 
 		// 댓글이 없을 경우
@@ -69,21 +70,25 @@ public class CommentService {
 	@Transactional
 	public void saveComment(CommentCreateReqDto createReqDTO) {
 		Post post = postService.getPost(createReqDTO.postId());
-		Comments comment = new Comments(createReqDTO.userId(), createReqDTO.content());
+		long userId = UserContext.getUserId();
+		Comments comment = new Comments(userId, createReqDTO.content());
 		post.addComments(comment);
 		commentRepository.save(comment);
 	}
 
 	@Transactional
 	public void updateComment(CommentUpdateReqDto updateReqDto) {
-		if (updateReqDto.isGroupPost() && groupService.isWriteRestricted(updateReqDto.groupId(), updateReqDto.userId())) {
+		long userId = UserContext.getUserId();
+		if (updateReqDto.isGroupPost() && groupService.isWriteRestricted(updateReqDto.groupId(), userId)) {
 			throw new UnauthorizedAccessException("write denied");
 		}
-		Comments comments = commentRepository.findById(updateReqDto.commentId())
+
+		Comments comments = commentRepository.findCommentsByIdAndUserId(updateReqDto.commentId(), userId)
 				.orElseThrow(() -> {
 					log.warn("Comment {} Not Found", updateReqDto.commentId());
 					return new NotFoundException("Comment Not Found");
 				});
+
 		comments.setContent(updateReqDto.content());
 	}
 

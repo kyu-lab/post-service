@@ -20,3 +20,5 @@ eureka:
 gateway:
   url: http://localhost:8000
   key: ZGtzb2FmamRhc3BvZmphZHdzZjtsa2prbGohQCNAKClfKmpA
+jwt:
+  access-token: SGVsbG9AI2UzV3JvbGQhQCN9RHxkc2prZC0oOTBNeVNlY3JldCEyMyRGREcjMw==

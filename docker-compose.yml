@@ -26,7 +26,6 @@ services:
       - pgdata:/var/lib/postgresql/data
     networks:
       - my-network
-
 networks:
   my-network:
     driver: bridge

@@ -1,6 +1,7 @@
 package kyulab.postservice.service;
 
 import kyulab.postservice.domain.ContentStatus;
+import kyulab.postservice.domain.PostOrder;
 import kyulab.postservice.domain.group.GroupUsersStatus;
 import kyulab.postservice.dto.gateway.UsersList;
 import kyulab.postservice.dto.gateway.UsersResDto;
@@ -12,11 +13,13 @@ import kyulab.postservice.entity.GroupUsers;
 import kyulab.postservice.entity.Post;
 import kyulab.postservice.entity.PostView;
 import kyulab.postservice.entity.key.PostViewId;
+import kyulab.postservice.handler.exception.BadRequestException;
 import kyulab.postservice.handler.exception.NotFoundException;
 import kyulab.postservice.handler.exception.UnauthorizedAccessException;
 import kyulab.postservice.repository.CommentRepository;
 import kyulab.postservice.repository.PostRepository;
 import kyulab.postservice.repository.PostViewRepository;
+import kyulab.postservice.utils.UserContext;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
@@ -41,9 +44,14 @@ public class PostService {
 	private final CommentRepository commentRepository;
 	private final PostViewRepository postViewRepository;
 
+	/**
+	 * 삭제되지 않은 게시글을 조회한다.
+	 * @param id 게시글 아이디
+	 * @return 삭제되지 않은 게시글
+	 */
 	@Transactional(readOnly = true)
-	public Post getPost(Long id) {
-		return postRepository.findById(id)
+	public Post getPost(long id) {
+		return postRepository.findPostByIdWithNotDeleteStatus(id)
 				.orElseThrow(() -> {
 					log.info("Post {} Not Found", id);
 					return new NotFoundException("Post Not Found");
@@ -51,12 +59,18 @@ public class PostService {
 	}
 
 	@Transactional(readOnly = true)
-	public List<Post> getPosts(Long cursor, Integer limit) {
-		PageRequest pageable = PageRequest.of(0, limit + 1); // 1을 더해 다음 데이터가 있는지 확인
+	public List<Post> getPosts(Long cursor, Integer limit, PostOrder postOrder) {
+		// 1을 더해 다음 데이터가 있는지 확인
+		PageRequest pageable = PageRequest.of(0, limit + 1);
 
-		List<Post> posts = cursor == null
-				? postRepository.findAll(pageable).getContent() // 처음 요청 시
-				: postRepository.findPostsByCursor(cursor, pageable);
+		List<Post> posts;
+		if (postOrder == PostOrder.NEW) {
+			posts = postRepository.findPostsByCreatedAt(cursor, pageable);
+		} else if (postOrder == PostOrder.VIEW) {
+			posts = postRepository.findPostsByViewCount(cursor, pageable);
+		} else {
+			throw new BadRequestException("Invalid order type: " + postOrder);
+		}
 
 		// 실제 반환할 데이터는 limit까지만
 		return posts.size() > limit ? posts.subList(0, limit) : posts;
@@ -64,13 +78,15 @@ public class PostService {
 
 	/**
 	 * 게시글 목록을 가져온다.
-	 * @param cursor 현재 커서 위치
+	 *
+	 * @param cursor    현재 커서 위치
+	 * @param postOrder 정렬 기준
 	 * @return 게시글 목록
 	 */
 	@Transactional(readOnly = true)
-	public PostListResDto getPostSummaryList(Long cursor) {
+	public PostListResDto getPostSummaryList(Long cursor, PostOrder postOrder) {
 		int limit = 10;
-		List<Post> posts = getPosts(cursor, limit);
+		List<Post> posts = getPosts(cursor, limit, postOrder);
 
 		// 사용자 아이디를 중복되지 않게 추출한다.
 		Set<Long> userIds = posts.stream()
@@ -101,12 +117,17 @@ public class PostService {
 		return new PostListResDto(postList, nextCursor, hasMore);
 	}
 
-	@Transactional(readOnly = true)
-	public PostResDto getPostDetail(Long postId) {
+	@Transactional
+	public PostResDto getPostDetail(long postId) {
 		Post post = getPost(postId);
-		UsersResDto usersInfo = usersGatewayService.requestUserInfo(postId);
-		if (isNotReadPost(postId, usersInfo.id())) {
-			increaseViewCount(postId, usersInfo.id());
+		UsersResDto usersInfo = usersGatewayService.requestUserInfo(post.getUserId());
+
+		// 사용자일 경우 토큰으로 조회수를 올린다.
+		if (UserContext.isLogin()) {
+			long userId = UserContext.getUserId();
+			if (isNotReadPost(postId, userId)) {
+				increaseViewCount(postId, userId);
+			}
 		}
 		long viewCount = getViewCount(postId);
 		return new PostResDto(usersInfo, PostDetailResDto.from(post, viewCount));
@@ -121,7 +142,7 @@ public class PostService {
 	@Transactional(readOnly = true)
 	public boolean isNotReadPost(Long postId, Long userId) {
 		PostViewId postViewId = new PostViewId(postId, userId);
-		return postViewRepository.existsById(postViewId);
+		return !postViewRepository.existsById(postViewId);
 	}
 
 	@Transactional(readOnly = true)
@@ -184,6 +205,18 @@ public class PostService {
 		post.setContent(updateReqDTO.content());
 
 		return URI.create("/post/" + post.getId());
+	}
+
+	@Transactional
+	public void deletePost(long postId) {
+		Post post = getPost(postId);
+		long userId = UserContext.getUserId();
+
+		log.info("삭제 게시글 아이디: {}, 유저 아이디: {}", post.getId(), userId);
+		if (!Objects.equals(post.getUserId(), userId)) {
+			throw new UnauthorizedAccessException("삭제 권한이 없습니다.");
+		}
+		post.setStatus(ContentStatus.DELETE);
 	}
 
 	/**
