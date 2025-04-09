@@ -7,9 +7,9 @@ import java.time.LocalDateTime;
 public record PostSummaryResDto(
 		UsersResDto usersInfo,
 		long postId,
+		String subject,
 		String summary,
 		long postViewCount,
 		long commentCount,
-		LocalDateTime createdAt
-) {
+		LocalDateTime createdAt) {
 }

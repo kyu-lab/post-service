@@ -1,4 +1,4 @@
-package kyulab.postservice.service;
+package kyulab.postservice.service.gateway;
 
 import kyulab.postservice.dto.gateway.UsersList;
 import kyulab.postservice.dto.gateway.UsersResDto;

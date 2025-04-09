@@ -1,7 +1,7 @@
 package kyulab.postservice.service;
 
 import kyulab.postservice.domain.group.GroupUsersStatus;
-import kyulab.postservice.dto.gateway.UsersGroupCreateDto;
+import kyulab.postservice.dto.kafka.search.GroupDto;
 import kyulab.postservice.dto.req.GroupCreateReqDto;
 import kyulab.postservice.dto.req.GroupUpdateReqDto;
 import kyulab.postservice.dto.res.GroupResDto;
@@ -14,6 +14,7 @@ import kyulab.postservice.handler.exception.NotFoundException;
 import kyulab.postservice.handler.exception.UnauthorizedAccessException;
 import kyulab.postservice.repository.GroupUsersRepsitory;
 import kyulab.postservice.repository.GroupRepository;
+import kyulab.postservice.service.kafka.KafkaService;
 import kyulab.postservice.utils.UserContext;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -28,6 +29,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class GroupService {
 
+	private final KafkaService kafkaService;
 	private final GroupRepository groupRepository;
 	private final GroupUsersRepsitory groupUsersRepsitory;
 
@@ -71,18 +73,17 @@ public class GroupService {
 	}
 
 	@Transactional(readOnly = true)
-	public GroupUsers getGroupUser(Long groupId, Long userId) {
-		GroupUserId groupUserId = new GroupUserId(groupId, userId);
+	public GroupUsers getGroupUser(GroupUserId groupUserId) {
 		return groupUsersRepsitory.findById(groupUserId)
 				.orElseThrow(() -> {
-					log.info("User {} Not Found In group : {}", userId, groupId);
+					log.info("User {} Not Found In group : {}", groupUserId.getUserId(), groupUserId.getGroupId());
 					return new UnauthorizedAccessException("User Not Found");
 				});
 	}
 
 	@Transactional(readOnly = true)
-	public boolean isWriteRestricted(Long groupId, Long userId) {
-		GroupUsers groupUser = getGroupUser(groupId, userId);
+	public boolean isWriteRestricted(GroupUserId groupUserId) {
+		GroupUsers groupUser = getGroupUser(groupUserId);
 
 		// 정지 또는 승인 대기 중인 사용자는 작성 금지
 		return groupUser.getStatus() == GroupUsersStatus.BAN ||
@@ -97,28 +98,15 @@ public class GroupService {
 
 		Groups newGroups = groupRepository.save(new Groups(createReqDTO));
 		GroupUsers newGroupUsers = new GroupUsers(
-				new GroupUserId(UserContext.getUserId(), newGroups.getId())
+				GroupUserId.of(UserContext.getUserId(), newGroups.getId())
 		);
 		newGroups.addGroupUsers(newGroupUsers);
 		groupUsersRepsitory.save(newGroupUsers);
 
+		// 그룹 검색을 위해 추가
+		GroupDto groupDto = new GroupDto(newGroups);
+		kafkaService.sendMsg("group-search", groupDto);
 		return GroupResDto.from(newGroups);
-	}
-
-	@Transactional
-	public boolean saveUserGroup(UsersGroupCreateDto createReqDTO) {
-		if (groupRepository.existsById(createReqDTO.userId())) {
-			throw new BadRequestException("Already Exsits");
-		}
-
-		Groups userGroup = groupRepository.save(new Groups(createReqDTO));
-		GroupUsers newGroupUsers = new GroupUsers(
-			new GroupUserId(UserContext.getUserId(), userGroup.getId())
-		);
-
-		userGroup.addGroupUsers(newGroupUsers);
-		groupUsersRepsitory.save(newGroupUsers);
-		return true;
 	}
 
 	@Transactional
@@ -134,7 +122,7 @@ public class GroupService {
 				});
 
 		long userId = UserContext.getUserId();
-		GroupUserId groupUserId = new GroupUserId(updateReqDto.groupId(), userId);
+		GroupUserId groupUserId = GroupUserId.of(updateReqDto.groupId(), userId);
 		GroupUsers groupUsers = groupUsersRepsitory.findById(groupUserId)
 				.orElseThrow(() -> {
 					log.info("User {} Not Found", userId);

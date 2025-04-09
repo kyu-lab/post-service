@@ -7,9 +7,11 @@ import kyulab.postservice.dto.req.CommentUpdateReqDto;
 import kyulab.postservice.dto.res.CommentResDto;
 import kyulab.postservice.entity.Comments;
 import kyulab.postservice.entity.Post;
+import kyulab.postservice.entity.key.GroupUserId;
 import kyulab.postservice.handler.exception.NotFoundException;
 import kyulab.postservice.handler.exception.UnauthorizedAccessException;
 import kyulab.postservice.repository.CommentRepository;
+import kyulab.postservice.service.gateway.UsersGatewayService;
 import kyulab.postservice.utils.UserContext;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -56,7 +58,7 @@ public class CommentService {
 			UsersResDto user = usersList.userList().stream()
 					.filter(u -> Objects.equals(u.id(), comment.getUserId()))
 					.findFirst()
-					.orElse(new UsersResDto(0L, "삭제된 사용자"));
+					.orElse(new UsersResDto(0L, "삭제된 사용자", null));
 			return new CommentResDto(
 					user.id(),
 					user.name(),
@@ -79,7 +81,7 @@ public class CommentService {
 	@Transactional
 	public void updateComment(CommentUpdateReqDto updateReqDto) {
 		long userId = UserContext.getUserId();
-		if (updateReqDto.isGroupPost() && groupService.isWriteRestricted(updateReqDto.groupId(), userId)) {
+		if (updateReqDto.isGroupPost() && groupService.isWriteRestricted(GroupUserId.of(userId, updateReqDto.groupId()))) {
 			throw new UnauthorizedAccessException("write denied");
 		}
 

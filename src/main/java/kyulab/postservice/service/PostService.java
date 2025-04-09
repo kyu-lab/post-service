@@ -5,6 +5,8 @@ import kyulab.postservice.domain.PostOrder;
 import kyulab.postservice.domain.group.GroupUsersStatus;
 import kyulab.postservice.dto.gateway.UsersList;
 import kyulab.postservice.dto.gateway.UsersResDto;
+import kyulab.postservice.dto.kafka.notices.PostNoticesDto;
+import kyulab.postservice.dto.kafka.search.PostDto;
 import kyulab.postservice.dto.req.PostCreateReqDto;
 import kyulab.postservice.dto.req.PostUpdateReqDto;
 import kyulab.postservice.dto.res.*;
@@ -12,6 +14,7 @@ import kyulab.postservice.entity.Groups;
 import kyulab.postservice.entity.GroupUsers;
 import kyulab.postservice.entity.Post;
 import kyulab.postservice.entity.PostView;
+import kyulab.postservice.entity.key.GroupUserId;
 import kyulab.postservice.entity.key.PostViewId;
 import kyulab.postservice.handler.exception.BadRequestException;
 import kyulab.postservice.handler.exception.NotFoundException;
@@ -19,6 +22,8 @@ import kyulab.postservice.handler.exception.UnauthorizedAccessException;
 import kyulab.postservice.repository.CommentRepository;
 import kyulab.postservice.repository.PostRepository;
 import kyulab.postservice.repository.PostViewRepository;
+import kyulab.postservice.service.gateway.UsersGatewayService;
+import kyulab.postservice.service.kafka.KafkaService;
 import kyulab.postservice.utils.UserContext;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -40,6 +45,7 @@ public class PostService {
 
 	private final GroupService groupService;
 	private final UsersGatewayService usersGatewayService;
+	private final KafkaService kafkaService;
 	private final PostRepository postRepository;
 	private final CommentRepository commentRepository;
 	private final PostViewRepository postViewRepository;
@@ -59,21 +65,15 @@ public class PostService {
 	}
 
 	@Transactional(readOnly = true)
-	public List<Post> getPosts(Long cursor, Integer limit, PostOrder postOrder) {
-		// 1을 더해 다음 데이터가 있는지 확인
+	public List<Post> getPosts(Long cursor, int limit, PostOrder postOrder) {
 		PageRequest pageable = PageRequest.of(0, limit + 1);
-
-		List<Post> posts;
-		if (postOrder == PostOrder.NEW) {
-			posts = postRepository.findPostsByCreatedAt(cursor, pageable);
-		} else if (postOrder == PostOrder.VIEW) {
-			posts = postRepository.findPostsByViewCount(cursor, pageable);
+		if (postOrder == PostOrder.N) {
+			return postRepository.findPostsByCreatedAt(cursor, pageable);
+		} else if (postOrder == PostOrder.V) {
+			return postRepository.findPostsByViewCount(cursor, pageable);
 		} else {
 			throw new BadRequestException("Invalid order type: " + postOrder);
 		}
-
-		// 실제 반환할 데이터는 limit까지만
-		return posts.size() > limit ? posts.subList(0, limit) : posts;
 	}
 
 	/**
@@ -98,12 +98,13 @@ public class PostService {
 			UsersResDto user = usersList.userList().stream()
 					.filter(u -> Objects.equals(u.id(), post.getUserId()))
 					.findFirst()
-					.orElse(new UsersResDto(0L, "삭제된 사용자"));
+					.orElse(new UsersResDto(0L, "삭제된 사용자", null));
 			long viewCount = postViewRepository.countByIdPostId(post.getId());
 			long commentCount = getCommentsCount(post.getId());
 			return new PostSummaryResDto(
 					user,
 					post.getId(),
+					post.getSubject(),
 					post.getSummary(),
 					viewCount,
 					commentCount,
@@ -113,7 +114,7 @@ public class PostService {
 
 		// 다음 게시글이 있는지 확인한다.
 		boolean hasMore = posts.size() > limit;
-		Long nextCursor = postList.isEmpty() ? null : postList.get(postList.size() - 1).postId();
+		long nextCursor = postList.isEmpty() ? null : postList.get(postList.size() - 1).postId();
 		return new PostListResDto(postList, nextCursor, hasMore);
 	}
 
@@ -157,16 +158,17 @@ public class PostService {
 
 	@Transactional
 	public URI savePost(PostCreateReqDto createReqDTO) {
-		if (groupService.isWriteRestricted(createReqDTO.groupId(), createReqDTO.userId())) {
+		long userId = UserContext.getUserId();
+		if (groupService.isWriteRestricted(GroupUserId.of(userId, createReqDTO.groupId()))) {
 			throw new UnauthorizedAccessException("write denied");
 		}
 
 		Groups groups = groupService.getGroup(createReqDTO.groupId());
 		GroupUsers groupUser = groups.getGroupUsers().stream()
-				.filter(groupUsers -> groupUsers.getId().getUserId().equals(createReqDTO.userId()))
+				.filter(groupUsers -> groupUsers.getId().getUserId().equals(userId))
 				.findFirst()
 				.orElseThrow(() -> {
-					log.info("User : {}, Not Groups user", createReqDTO.userId());
+					log.info("User : {}, Not Groups user", userId);
 					return new UnauthorizedAccessException("write denied");
 				});
 
@@ -178,13 +180,28 @@ public class PostService {
 
 		Post post = createPost(createReqDTO);
 		groups.addPostInGroup(post);
-		return URI.create("/post/" + postRepository.save(post).getId());
+		long postId = postRepository.save(post).getId();
+
+		// 게시글 생성 성공시 구독자에게 알림 발송
+		PostNoticesDto postNoticesDto = new PostNoticesDto(post);
+		kafkaService.sendMsg("new-post", postNoticesDto);
+
+		// 검색 서비스에 추가 발송
+		PostDto postDto = new PostDto(post);
+		kafkaService.sendMsg("post-search", postDto);
+
+		// 파일 서비스에 이미지 리스트 발송
+		List<String> imgList = createReqDTO.imgList();
+		if (!imgList.isEmpty()) {
+			kafkaService.sendMsg("post-save", imgList);
+		}
+		return URI.create("/post/" + postId);
 	}
 
 	@Transactional
 	public Post createPost(PostCreateReqDto createReqDTO) {
 		return new Post(
-				createReqDTO.userId(),
+				UserContext.getUserId(),
 				createReqDTO.subject(),
 				createReqDTO.content(),
 				extractSummary(createReqDTO.content())
@@ -193,7 +210,7 @@ public class PostService {
 
 	@Transactional
 	public URI updatePost(PostUpdateReqDto updateReqDTO) {
-		if (groupService.isWriteRestricted(updateReqDTO.groupId(), updateReqDTO.userId())) {
+		if (groupService.isWriteRestricted(GroupUserId.of(updateReqDTO.userId(), updateReqDTO.groupId()))) {
 			throw new UnauthorizedAccessException("write denied");
 		}
 		Post post = postRepository.findPostByIdAndStatusNot(updateReqDTO.postId(), ContentStatus.DELETE)

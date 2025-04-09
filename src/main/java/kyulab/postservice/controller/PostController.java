@@ -19,9 +19,9 @@ public class PostController {
 
 	@GetMapping
 	public ResponseEntity<PostListResDto> getPosts(
-			@RequestParam(required = false, defaultValue = "0") Long cusor,
-			@RequestParam(required = false, defaultValue = "NEW") PostOrder postOrder) {
-		return ResponseEntity.ok(postService.getPostSummaryList(cusor, postOrder));
+			@RequestParam(required = false) Long cursor,
+			@RequestParam(required = false, defaultValue = "N") PostOrder postOrder) {
+		return ResponseEntity.ok(postService.getPostSummaryList(cursor, postOrder));
 	}
 
 	@GetMapping("/{postId}")

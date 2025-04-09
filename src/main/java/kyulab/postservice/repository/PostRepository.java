@@ -26,7 +26,7 @@ public interface PostRepository extends JpaRepository<Post, Long> {
 	@Query(
 		"SELECT p " +
 		"FROM Post p " +
-		"WHERE p.id > :cursor " +
+		"WHERE (:cursor IS NULL OR p.id < :cursor) " +
 		"AND p.status <> 'DELETE' " +
 		"ORDER BY p.createdAt DESC"
 	)
