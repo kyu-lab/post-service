@@ -22,10 +22,10 @@ public class Post {
 
 	@Id
 	@GeneratedValue(strategy = GenerationType.SEQUENCE)
-	private Long id;
+	private long id;
 
 	@Column(nullable = false)
-	private Long userId;
+	private long userId;
 
 	@Column(
 		nullable = false,
@@ -57,7 +57,7 @@ public class Post {
 	@LastModifiedDate
 	private LocalDateTime modifiedAt;
 
-	public Post(Long userId, String subject, String content, String summary) {
+	public Post(long userId, String subject, String content, String summary) {
 		this.userId = userId;
 		this.subject = subject;
 		this.content = content;

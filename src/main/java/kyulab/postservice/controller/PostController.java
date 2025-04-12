@@ -1,5 +1,6 @@
 package kyulab.postservice.controller;
 
+import kyulab.postservice.domain.PostOrder;
 import kyulab.postservice.dto.req.PostCreateReqDto;
 import kyulab.postservice.dto.req.PostUpdateReqDto;
 import kyulab.postservice.dto.res.PostResDto;
@@ -18,12 +19,13 @@ public class PostController {
 
 	@GetMapping
 	public ResponseEntity<PostListResDto> getPosts(
-			@RequestParam(required = false) Long cusor) {
-		return ResponseEntity.ok(postService.getPostSummaryList(cusor));
+			@RequestParam(required = false) Long cursor,
+			@RequestParam(required = false, defaultValue = "N") PostOrder postOrder) {
+		return ResponseEntity.ok(postService.getPostSummaryList(cursor, postOrder));
 	}
 
 	@GetMapping("/{postId}")
-	public ResponseEntity<PostResDto> getPost(@PathVariable Long postId) {
+	public ResponseEntity<PostResDto> getPost(@PathVariable long postId) {
 		return ResponseEntity.ok(postService.getPostDetail(postId));
 	}
 
@@ -32,9 +34,15 @@ public class PostController {
 		return ResponseEntity.created(postService.savePost(createReqDTO)).build();
 	}
 
-	@PutMapping("/update")
+	@PutMapping
 	public ResponseEntity<String> updatePost(@RequestBody PostUpdateReqDto updateReqDTO) {
 		return ResponseEntity.created(postService.updatePost(updateReqDTO)).build();
+	}
+
+	@DeleteMapping("/{postId}")
+	public ResponseEntity<String> deletePost(@PathVariable long postId) {
+		postService.deletePost(postId);
+		return ResponseEntity.accepted().build();
 	}
 
 }

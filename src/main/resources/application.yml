@@ -9,5 +9,3 @@ spring:
   jpa:
     show-sql: true
     open-in-view: false
-gateway:
-  user-path: /gateway/users

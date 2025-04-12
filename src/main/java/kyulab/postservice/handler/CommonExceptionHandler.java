@@ -2,6 +2,7 @@ package kyulab.postservice.handler;
 
 import kyulab.postservice.handler.exception.BadRequestException;
 import kyulab.postservice.handler.exception.NotFoundException;
+import kyulab.postservice.handler.exception.ServerErrorExcpetion;
 import kyulab.postservice.handler.exception.UnauthorizedAccessException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -26,6 +27,11 @@ public class CommonExceptionHandler {
 	@ExceptionHandler(UnauthorizedAccessException.class)
 	public ResponseEntity<String> handleUnauthorizedAccessException(UnauthorizedAccessException u) {
 		return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(u.getMessage());
+	}
+
+	@ExceptionHandler(ServerErrorExcpetion.class)
+	public ResponseEntity<String> handleServerErrorExcpetion(ServerErrorExcpetion s) {
+		return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(s.getMessage());
 	}
 
 }

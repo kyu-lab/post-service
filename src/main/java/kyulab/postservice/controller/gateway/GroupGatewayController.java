@@ -1,7 +1,7 @@
-package kyulab.postservice.controller;
+package kyulab.postservice.controller.gateway;
 
 import kyulab.postservice.dto.gateway.UsersGroupCreateDto;
-import kyulab.postservice.service.GroupService;
+import kyulab.postservice.service.gateway.GroupGatewayService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -13,11 +13,11 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class GroupGatewayController {
 
-	private final GroupService groupService;
+	private final GroupGatewayService groupGatewayService;
 
 	@PostMapping
 	public boolean saveUserGroup(@RequestBody UsersGroupCreateDto createReqDTO) {
-		return groupService.saveUserGroup(createReqDTO);
+		return groupGatewayService.saveUserGroup(createReqDTO);
 	}
 
 }

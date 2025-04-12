@@ -7,12 +7,15 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.io.Serializable;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Objects;
 
 @Getter
 @Embeddable
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class GroupUserId implements Serializable {
+	private static final Map<String, GroupUserId> CACHE = new HashMap<>();
 
 	@Column(
 		name = "user_id",
@@ -26,9 +29,13 @@ public class GroupUserId implements Serializable {
 	)
 	private Long groupId;
 
-	public GroupUserId(Long userId, Long groupId) {
+	private GroupUserId(Long userId, Long groupId) {
 		this.userId = userId;
 		this.groupId = groupId;
+	}
+
+	public static GroupUserId of(Long userId, Long groupId) {
+		return new GroupUserId(userId, groupId);
 	}
 
 	@Override

@@ -41,7 +41,6 @@ class PostServiceApplicationTests {
 	@DisplayName("테스트전 기초 데이터 생성")
 	void setUp() {
 		GroupCreateReqDto publicGroup = new GroupCreateReqDto(
-				1L,
 				"공개그룹",
 				GroupStatus.PUBLIC,
 				null
@@ -49,7 +48,6 @@ class PostServiceApplicationTests {
 		groupService.saveGroup(publicGroup);
 
 		GroupCreateReqDto privateGroup = new GroupCreateReqDto(
-				2L,
 				"비공개그룹",
 				GroupStatus.PRIVATE,
 				null
@@ -108,14 +106,13 @@ class PostServiceApplicationTests {
 				.build()
 				.getPathSegments()
 				.get(1);
-		assertEquals(reqDTO.subject(), postService.getPost(Long.valueOf(postId)).getSubject());
+		assertEquals(reqDTO.subject(), postService.getPost(Long.parseLong(postId)).getSubject());
 	}
 
 	@Test
 	@DisplayName("댓글 생성")
 	void saveComment() {
 		CommentCreateReqDto reqDTO = new CommentCreateReqDto(
-				1L,
 				1L,
 				"댓글 작성"
 		);
@@ -136,7 +133,7 @@ class PostServiceApplicationTests {
 	@Test
 	@DisplayName("그룹 가입 및 탈퇴")
 	void joinGroup() {
-		GroupUsersReqDto reqDto = new GroupUsersReqDto(3L, 1L);
+		GroupUsersReqDto reqDto = new GroupUsersReqDto(3L);
 		assertTrue(groupUsersService.joinGroup(reqDto));
 		assertTrue(groupUsersService.leaveGroup(reqDto));
 	}

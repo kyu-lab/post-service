@@ -1,4 +1,4 @@
-package kyulab.postservice.service;
+package kyulab.postservice.service.gateway;
 
 import kyulab.postservice.dto.gateway.UsersList;
 import kyulab.postservice.dto.gateway.UsersResDto;
@@ -21,10 +21,10 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class UsersGatewayService {
 
-	@Value("${gateway.url:}")
+	@Value("${gateway.base-url:}")
 	private String gateway;
 
-	@Value("${gateway.user-path:}")
+	@Value("${gateway.users-path:/users}")
 	private String userPath;
 
 	private final RestTemplate restTemplate;

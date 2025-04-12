@@ -13,7 +13,7 @@ import org.springframework.web.servlet.HandlerInterceptor;
 @RequiredArgsConstructor
 public class GatewayInterceptor implements HandlerInterceptor {
 
-	@Value("${gateway.key:}")
+	@Value("${gateway.gateway-key:}")
 	private String gatewayKey;
 
 	@Override

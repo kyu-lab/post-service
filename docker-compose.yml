@@ -1,6 +1,6 @@
-version: '3.8'
 services:
   post-service:
+    container_name: papp
     image: post-service:latest
     build:
       context: .
@@ -8,27 +8,27 @@ services:
     ports:
       - "8002:8002"
     environment:
-      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/post-service
-      - CONFIG_SERVER_URL=http://www.writehere.kro.kr:8888
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://ppost:5432/post-service
+      - CONFIG_SERVER_URL=http://172.17.0.1:8888
     depends_on:
       - postgres
     networks:
       - my-network
   postgres:
+    container_name: ppost
     image: postgres:15
     environment:
       - POSTGRES_DB=post-service
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=1234
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - pgdata_temp:/var/lib/postgresql/data
     networks:
       - my-network
-
 networks:
   my-network:
-    driver: bridge
+    external: true
 volumes:
-  pgdata:
+  pgdata_temp:

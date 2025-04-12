@@ -18,13 +18,13 @@ public class GroupController {
 
 	private final GroupService groupService;
 
-	@GetMapping("/{userId}")
-	public ResponseEntity<List<GroupResDto>> getGroupList(@PathVariable Long userId) {
-		return ResponseEntity.ok(groupService.getGroupList(userId));
+	@GetMapping
+	public ResponseEntity<List<GroupResDto>> getGroupList() {
+		return ResponseEntity.ok(groupService.getGroupList());
 	}
 
-	@GetMapping
-	public ResponseEntity<List<GroupSearchResDto>> searchGroup(String name) {
+	@GetMapping("/searchGroup")
+	public ResponseEntity<List<GroupSearchResDto>> searchGroup(@RequestParam String name) {
 		return ResponseEntity.ok(groupService.searchGroup(name));
 	}
 
