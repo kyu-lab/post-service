@@ -12,7 +12,7 @@ import java.util.Collections;
 @Configuration
 public class PostAppConfig {
 
-	@Value("${gateway.key:}")
+	@Value("${gateway.gateway-key:}")
 	private String gatewayKey;
 
 	@Bean

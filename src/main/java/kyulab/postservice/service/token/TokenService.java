@@ -1,4 +1,4 @@
-package kyulab.postservice.service;
+package kyulab.postservice.service.token;
 
 import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.JwtException;

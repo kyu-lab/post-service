@@ -2,7 +2,7 @@ package kyulab.postservice.interceptor;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import kyulab.postservice.service.TokenService;
+import kyulab.postservice.service.token.TokenService;
 import kyulab.postservice.utils.UserContext;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;

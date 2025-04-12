@@ -21,10 +21,10 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class UsersGatewayService {
 
-	@Value("${gateway.url:}")
+	@Value("${gateway.base-url:}")
 	private String gateway;
 
-	@Value("${gateway.user-path:}")
+	@Value("${gateway.users-path:/users}")
 	private String userPath;
 
 	private final RestTemplate restTemplate;
