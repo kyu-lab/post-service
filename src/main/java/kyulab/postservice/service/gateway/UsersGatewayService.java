@@ -1,6 +1,7 @@
 package kyulab.postservice.service.gateway;
 
 import kyulab.postservice.dto.gateway.UsersList;
+import kyulab.postservice.dto.gateway.UsersListDto;
 import kyulab.postservice.dto.gateway.UsersResDto;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -31,11 +32,11 @@ public class UsersGatewayService {
 
 	/**
 	 * 사용자 서비스(users-serivce)에게 사용자들의 정보를 요청한 후 반환한다.
-	 * @param userIds 요청할 사용자 정보 목록
+	 * @param listDto 요청할 사용자 정보 목록
 	 * @return 사용자 정보 목록
 	 */
-	public UsersList requestUserInfos(Set<Long> userIds) {
-		HttpEntity<Set<Long>> request = new HttpEntity<>(userIds);
+	public UsersList requestUserInfos(UsersListDto listDto) {
+		HttpEntity<UsersListDto> request = new HttpEntity<>(listDto);
 		return restTemplate.exchange(
 				gateway + userPath,
 				HttpMethod.POST,

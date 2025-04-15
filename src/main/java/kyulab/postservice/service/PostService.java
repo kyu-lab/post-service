@@ -4,6 +4,7 @@ import kyulab.postservice.domain.ContentStatus;
 import kyulab.postservice.domain.PostOrder;
 import kyulab.postservice.domain.group.GroupUsersStatus;
 import kyulab.postservice.dto.gateway.UsersList;
+import kyulab.postservice.dto.gateway.UsersListDto;
 import kyulab.postservice.dto.gateway.UsersResDto;
 import kyulab.postservice.dto.kafka.notices.PostNoticesDto;
 import kyulab.postservice.dto.kafka.search.PostDto;
@@ -78,13 +79,12 @@ public class PostService {
 
 	/**
 	 * 게시글 목록을 가져온다.
-	 *
 	 * @param cursor    현재 커서 위치
 	 * @param postOrder 정렬 기준
 	 * @return 게시글 목록
 	 */
 	@Transactional(readOnly = true)
-	public PostListResDto getPostSummaryList(Long cursor, PostOrder postOrder) {
+	public PostListResDto getPostList(Long cursor, PostOrder postOrder) {
 		int limit = 10;
 		List<Post> posts = getPosts(cursor, limit, postOrder);
 
@@ -92,17 +92,18 @@ public class PostService {
 		Set<Long> userIds = posts.stream()
 				.map(Post::getUserId)
 				.collect(Collectors.toSet());
-		UsersList usersList = usersGatewayService.requestUserInfos(userIds);
+		UsersListDto listDto = new UsersListDto(UserContext.getUserId(), userIds);
+		UsersList usersList = usersGatewayService.requestUserInfos(listDto);
 
 		List<PostSummaryResDto> postList = posts.stream().map(post -> {
-			UsersResDto user = usersList.userList().stream()
+			UsersResDto writerInfo = usersList.userList().stream()
 					.filter(u -> Objects.equals(u.id(), post.getUserId()))
 					.findFirst()
-					.orElse(new UsersResDto(0L, "삭제된 사용자", null));
+					.orElse(new UsersResDto(0L, "삭제된 사용자", null, null, 0));
 			long viewCount = postViewRepository.countByIdPostId(post.getId());
 			long commentCount = getCommentsCount(post.getId());
 			return new PostSummaryResDto(
-					user,
+					writerInfo,
 					post.getId(),
 					post.getSubject(),
 					post.getSummary(),

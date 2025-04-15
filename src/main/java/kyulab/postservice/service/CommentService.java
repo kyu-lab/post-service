@@ -1,6 +1,7 @@
 package kyulab.postservice.service;
 
 import kyulab.postservice.dto.gateway.UsersList;
+import kyulab.postservice.dto.gateway.UsersListDto;
 import kyulab.postservice.dto.gateway.UsersResDto;
 import kyulab.postservice.dto.req.CommentCreateReqDto;
 import kyulab.postservice.dto.req.CommentUpdateReqDto;
@@ -52,13 +53,14 @@ public class CommentService {
 		Set<Long> userIds = commentsList.stream()
 				.map(Comments::getUserId)
 				.collect(Collectors.toSet());
-		UsersList usersList = usersGatewayService.requestUserInfos(userIds);
+		UsersListDto listDto = new UsersListDto(UserContext.getUserId(), userIds);
+		UsersList usersList = usersGatewayService.requestUserInfos(listDto);
 
 		return commentsList.stream().map(comment -> {
 			UsersResDto user = usersList.userList().stream()
 					.filter(u -> Objects.equals(u.id(), comment.getUserId()))
 					.findFirst()
-					.orElse(new UsersResDto(0L, "삭제된 사용자", null));
+					.orElse(new UsersResDto(0L, "삭제된 사용자", null, null, 0));
 			return new CommentResDto(
 					user.id(),
 					user.name(),

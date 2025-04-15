@@ -1,11 +1,12 @@
 package kyulab.postservice.dto.res;
 
 import kyulab.postservice.dto.gateway.UsersResDto;
+import kyulab.postservice.entity.Post;
 
 import java.time.LocalDateTime;
 
 public record PostSummaryResDto(
-		UsersResDto usersInfo,
+		UsersResDto writerInfo,
 		long postId,
 		String subject,
 		String summary,
