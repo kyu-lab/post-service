@@ -1,11 +1,11 @@
 package kyulab.postservice.service;
 
-import kyulab.postservice.domain.group.GroupStatus;
 import kyulab.postservice.domain.group.GroupUsersStatus;
-import kyulab.postservice.dto.req.GroupUsersReqDto;
+import kyulab.postservice.dto.req.GroupUserJoinDto;
 import kyulab.postservice.entity.Groups;
 import kyulab.postservice.entity.GroupUsers;
 import kyulab.postservice.entity.key.GroupUserId;
+import kyulab.postservice.handler.exception.NotFoundException;
 import kyulab.postservice.repository.GroupUsersRepsitory;
 import kyulab.postservice.utils.UserContext;
 import lombok.RequiredArgsConstructor;
@@ -18,34 +18,34 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class GroupUsersService {
 
-	private final GroupUsersRepsitory groupUsersRepsitory;
 	private final GroupService groupService;
+	private final GroupUsersRepsitory groupUsersRepsitory;
 
 	@Transactional
-	public boolean joinGroup(GroupUsersReqDto joinReqDto) {
-		Groups groups = groupService.getGroup(joinReqDto.groupId());
-		if (groups.getStatus() == GroupStatus.PRIVATE) {
-			// todo : 비공개 그룹 가입 로직 필요
-			return false;
-		}
-
-		// 현재는 모든 그룹 참가 유저를 일반(NORMAL)으로 고정함
-		GroupUsers newGroupUsers = new GroupUsers(
-				GroupUserId.of(UserContext.getUserId(), joinReqDto.groupId()),
-				GroupUsersStatus.NORMAL
-		);
-		groups.addGroupUsers(newGroupUsers);
-		groupUsersRepsitory.save(newGroupUsers);
-		return true;
+	public GroupUsers getGroupUser(GroupUserId groupUserId) {
+		return groupUsersRepsitory.findById(groupUserId)
+				.orElseThrow(() ->{
+					log.error("Group Users {} Not Found", groupUserId);
+					return new NotFoundException("Group Users Not Found");
+				});
 	}
 
 	@Transactional
-	public boolean leaveGroup(GroupUsersReqDto joinReqDto) {
-		// todo : 그룹 떠날 경우 관리자에게 메시지 발송 기능 필요
-		// todo : 직접 삭제보다는 상태값으로 관리 필요
+	public void joinGroup(GroupUserJoinDto joinReqDto) {
+		Groups groups = groupService.getGroup(joinReqDto.groupId());
+
+		// 현재는 모든 그룹 참가 유저를 일반(NORMAL)으로 고정함
 		GroupUserId groupUserId = GroupUserId.of(UserContext.getUserId(), joinReqDto.groupId());
-		groupUsersRepsitory.deleteById(groupUserId);
-		return true;
+		GroupUsers newGroupUsers = GroupUsers.of(groupUserId, GroupUsersStatus.NORMAL);
+		groups.addGroupUsers(newGroupUsers);
+		groupUsersRepsitory.save(newGroupUsers);
+	}
+
+	@Transactional
+	public void leaveGroup(GroupUserJoinDto joinReqDto) {
+		GroupUserId groupUserId = GroupUserId.of(UserContext.getUserId(), joinReqDto.groupId());
+		GroupUsers groupUsers = getGroupUser(groupUserId);
+		groupUsers.updateStatus(GroupUsersStatus.EXITED);
 	}
 
 }

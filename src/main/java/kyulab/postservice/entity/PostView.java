@@ -1,9 +1,6 @@
 package kyulab.postservice.entity;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.EmbeddedId;
-import jakarta.persistence.Entity;
-import jakarta.persistence.EntityListeners;
+import jakarta.persistence.*;
 import kyulab.postservice.entity.key.PostViewId;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -22,12 +19,21 @@ public class PostView {
 	@EmbeddedId
 	private PostViewId id;
 
+	@ManyToOne(fetch = FetchType.LAZY)
+	@MapsId("postId")
+	@JoinColumn(name = "post_id")
+	private Post post;
+
 	@CreatedDate
 	@Column(updatable = false)
 	private LocalDateTime viewAt;
 
 	public PostView(PostViewId id) {
 		this.id = id;
+	}
+
+	public void setPost(Post post) {
+		this.post = post;
 	}
 
 }

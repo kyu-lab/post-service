@@ -1,0 +1,25 @@
+package kyulab.postservice.dto.res;
+
+import java.time.LocalDateTime;
+
+/**
+ * 게시글 목록 정보
+ * @param id			아이디
+ * @param userId		작성자 아이디
+ * @param subject		제목
+ * @param summary		요약본
+ * @param viewCount		조회수
+ * @param commentCount	댓글 수
+ * @param createdAt		작성일자
+ */
+public record PostListItemDto(long id, long userId, String subject, String summary, long viewCount, long commentCount, LocalDateTime createdAt) {
+	public PostListItemDto(long id, long userId, String subject, String summary, long viewCount, long commentCount, LocalDateTime createdAt) {
+		this.id = id;
+		this.userId = userId;
+		this.subject = subject;
+		this.summary = summary;
+		this.viewCount = viewCount;
+		this.commentCount = commentCount;
+		this.createdAt = createdAt;
+	}
+}

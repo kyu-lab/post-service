@@ -33,18 +33,25 @@ public class GroupUsers {
 	@Column(updatable = false)
 	private LocalDateTime joinedAt;
 
-	public GroupUsers(GroupUserId id) {
-		this.id = id;
-		this.status = GroupUsersStatus.SUPERADMIN; // 생성자는 최고 권한 부여
-	}
-
-	public GroupUsers(GroupUserId id, GroupUsersStatus status) {
+	private GroupUsers(GroupUserId id, GroupUsersStatus status) {
 		this.id = id;
 		this.status = status;
 	}
 
+	public static GroupUsers of(GroupUserId id) {
+		return new GroupUsers(id, GroupUsersStatus.SUPERADMIN);
+	}
+
+	public static GroupUsers of(GroupUserId id, GroupUsersStatus status) {
+		return new GroupUsers(id, status);
+	}
+
 	public void setGroups(Groups groups) {
 		this.groups = groups;
+	}
+
+	public void updateStatus(GroupUsersStatus status) {
+		this.status = status;
 	}
 
 }

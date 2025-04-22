@@ -1,9 +1,9 @@
 package kyulab.postservice.controller;
 
-import kyulab.postservice.dto.req.GroupCreateReqDto;
-import kyulab.postservice.dto.req.GroupUpdateReqDto;
-import kyulab.postservice.dto.res.GroupResDto;
-import kyulab.postservice.dto.res.GroupSearchResDto;
+import kyulab.postservice.dto.req.GroupCreateDto;
+import kyulab.postservice.dto.req.GroupUpdateDto;
+import kyulab.postservice.dto.res.GroupDto;
+import kyulab.postservice.entity.Groups;
 import kyulab.postservice.service.GroupService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -19,22 +19,22 @@ public class GroupController {
 	private final GroupService groupService;
 
 	@GetMapping
-	public ResponseEntity<List<GroupResDto>> getGroupList() {
+	public ResponseEntity<List<GroupDto>> getGroupList() {
 		return ResponseEntity.ok(groupService.getGroupList());
 	}
 
-	@GetMapping("/searchGroup")
-	public ResponseEntity<List<GroupSearchResDto>> searchGroup(@RequestParam String name) {
-		return ResponseEntity.ok(groupService.searchGroup(name));
+	@GetMapping("/{groupId}")
+	public ResponseEntity<Groups> getGroupInfo(@PathVariable long groupId) {
+		return ResponseEntity.ok(groupService.getGroupInfo(groupId));
 	}
 
 	@PostMapping
-	public ResponseEntity<GroupResDto> saveGroup(@RequestBody GroupCreateReqDto createReqDTO) {
-		return ResponseEntity.ok(groupService.saveGroup(createReqDTO));
+	public ResponseEntity<String> saveGroup(@RequestBody GroupCreateDto createDto) {
+		return ResponseEntity.created(groupService.saveGroup(createDto)).build();
 	}
 
 	@PutMapping
-	public ResponseEntity<GroupResDto> updateGroup(@RequestBody GroupUpdateReqDto updateReqDto) {
+	public ResponseEntity<GroupDto> updateGroup(@RequestBody GroupUpdateDto updateReqDto) {
 		return ResponseEntity.ok(groupService.updateGroup(updateReqDto));
 	}
 

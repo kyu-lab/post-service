@@ -1,10 +1,10 @@
 package kyulab.postservice.controller;
 
-import kyulab.postservice.domain.PostOrder;
-import kyulab.postservice.dto.req.PostCreateReqDto;
-import kyulab.postservice.dto.req.PostUpdateReqDto;
-import kyulab.postservice.dto.res.PostResDto;
-import kyulab.postservice.dto.res.PostListResDto;
+import kyulab.postservice.domain.content.ContentOrder;
+import kyulab.postservice.dto.req.PostCreateDto;
+import kyulab.postservice.dto.req.PostUpdateDto;
+import kyulab.postservice.dto.res.PostDto;
+import kyulab.postservice.dto.res.PostListDto;
 import kyulab.postservice.service.PostService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -18,25 +18,26 @@ public class PostController {
 	private final PostService postService;
 
 	@GetMapping
-	public ResponseEntity<PostListResDto> getPosts(
+	public ResponseEntity<PostListDto> getPosts(
 			@RequestParam(required = false) Long cursor,
-			@RequestParam(required = false, defaultValue = "N") PostOrder postOrder) {
-		return ResponseEntity.ok(postService.getPostList(cursor, postOrder));
+			@RequestParam(required = false, defaultValue = "N") ContentOrder contentOrder) {
+		return ResponseEntity.ok(postService.getPosts(cursor, contentOrder));
 	}
 
 	@GetMapping("/{postId}")
-	public ResponseEntity<PostResDto> getPost(@PathVariable long postId) {
-		return ResponseEntity.ok(postService.getPostDetail(postId));
+	public ResponseEntity<PostDto> getPost(@PathVariable long postId) {
+		return ResponseEntity.ok(postService.getPost(postId));
 	}
 
 	@PostMapping
-	public ResponseEntity<String> savePost(@RequestBody PostCreateReqDto createReqDTO) {
-		return ResponseEntity.created(postService.savePost(createReqDTO)).build();
+	public ResponseEntity<String> savePost(@RequestBody PostCreateDto createDto) {
+		return ResponseEntity.created(postService.savePost(createDto)).build();
 	}
 
 	@PutMapping
-	public ResponseEntity<String> updatePost(@RequestBody PostUpdateReqDto updateReqDTO) {
-		return ResponseEntity.created(postService.updatePost(updateReqDTO)).build();
+	public ResponseEntity<String> updatePost(@RequestBody PostUpdateDto updateDto) {
+		postService.updatePost(updateDto);
+		return ResponseEntity.ok().build();
 	}
 
 	@DeleteMapping("/{postId}")

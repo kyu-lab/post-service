@@ -1,26 +1,25 @@
 package kyulab.postservice.service;
 
-import kyulab.postservice.domain.ContentStatus;
-import kyulab.postservice.domain.PostOrder;
-import kyulab.postservice.domain.group.GroupUsersStatus;
-import kyulab.postservice.dto.gateway.UsersList;
-import kyulab.postservice.dto.gateway.UsersListDto;
-import kyulab.postservice.dto.gateway.UsersResDto;
-import kyulab.postservice.dto.kafka.notices.PostNoticesDto;
-import kyulab.postservice.dto.kafka.search.PostDto;
-import kyulab.postservice.dto.req.PostCreateReqDto;
-import kyulab.postservice.dto.req.PostUpdateReqDto;
+import kyulab.postservice.domain.content.ContentStatus;
+import kyulab.postservice.domain.content.ContentOrder;
+import kyulab.postservice.dto.gateway.res.UsersListDto;
+import kyulab.postservice.dto.gateway.res.UsersDto;
+import kyulab.postservice.dto.kafka.file.PostImgKafkaDto;
+import kyulab.postservice.dto.kafka.file.PostImgListKafkaDto;
+import kyulab.postservice.dto.kafka.notices.PostNoticesKafkaDto;
+import kyulab.postservice.dto.kafka.search.PostSearchKafkaDto;
+import kyulab.postservice.dto.req.PostCreateDto;
+import kyulab.postservice.dto.req.PostContentDto;
+import kyulab.postservice.dto.req.PostSettingsDto;
+import kyulab.postservice.dto.req.PostUpdateDto;
 import kyulab.postservice.dto.res.*;
 import kyulab.postservice.entity.Groups;
-import kyulab.postservice.entity.GroupUsers;
 import kyulab.postservice.entity.Post;
 import kyulab.postservice.entity.PostView;
-import kyulab.postservice.entity.key.GroupUserId;
 import kyulab.postservice.entity.key.PostViewId;
 import kyulab.postservice.handler.exception.BadRequestException;
 import kyulab.postservice.handler.exception.NotFoundException;
 import kyulab.postservice.handler.exception.UnauthorizedAccessException;
-import kyulab.postservice.repository.CommentRepository;
 import kyulab.postservice.repository.PostRepository;
 import kyulab.postservice.repository.PostViewRepository;
 import kyulab.postservice.service.gateway.UsersGatewayService;
@@ -48,193 +47,244 @@ public class PostService {
 	private final UsersGatewayService usersGatewayService;
 	private final KafkaService kafkaService;
 	private final PostRepository postRepository;
-	private final CommentRepository commentRepository;
 	private final PostViewRepository postViewRepository;
 
 	/**
-	 * 삭제되지 않은 게시글을 조회한다.
+	 * 요청한 위치에 정렬 기준에 맞춰 게시글을 반환한다.
+	 * @param cursor	현재 커서 위치
+	 * @param limit		가져올 게시글 수
+	 * @param contentOrder	정렬 기준
+	 * @return 게시글 엔티티
+	 */
+	@Transactional(readOnly = true)
+	public List<PostListItemDto> getPostsByOrder(Long cursor, ContentOrder contentOrder, int limit) {
+		PageRequest pageable = PageRequest.of(0, limit + 1);
+		if (contentOrder == ContentOrder.N) {
+			return postRepository.findNewPostByCurosr(cursor, pageable);
+		} else if (contentOrder == ContentOrder.V) {
+			return postRepository.findMostViewPostsByCurosr(cursor, pageable);
+		} else {
+			throw new BadRequestException("Invalid order type: " + contentOrder);
+		}
+	}
+
+	/**
+	 * 게시글 목록을 가져온다.
+	 * @param cursor    현재 커서 위치 (첫 요청시 null)
+	 * @param contentOrder 정렬 기준
+	 * @return 게시글 목록
+	 */
+	@Transactional(readOnly = true)
+	public PostListDto getPosts(Long cursor, ContentOrder contentOrder) {
+		int limit = 10;
+
+		// 1. 게시글 목록을 가져온다.
+		List<PostListItemDto> postListItemDtos = getPostsByOrder(cursor, contentOrder, limit);
+
+		// 2. 게시글 목록에서 사용자 아이디를 추출한다.
+		Set<Long> userIds = postListItemDtos.stream()
+				.map(PostListItemDto::userId)
+				.collect(Collectors.toSet());
+
+		// 3. 사용자 서비스에게 사용자 아이디 정보를 가져온다.
+		UsersListDto usersListDto = usersGatewayService.requestUserInfos(userIds);
+
+		// 4. 사용자 정보와 게시글 정보를 합친다.
+		List<PostItemDto> postList = postListItemDtos.stream().map(item -> {
+			UsersDto writerInfo = usersListDto.userList().stream()
+					.filter(u -> Objects.equals(u.id(), item.userId()))
+					.findFirst()
+					.orElse(UsersDto.deleteUser());
+			return new PostItemDto(writerInfo, item);
+		}).toList();
+
+		// 5. 다음 게시글이 있는지 확인한다.
+		boolean hasMore = postListItemDtos.size() > limit;
+		Long nextCursor = postListItemDtos.isEmpty() ? null : postListItemDtos.get(postListItemDtos.size() - 1).id();
+
+		return new PostListDto(postList, nextCursor, hasMore);
+	}
+
+	/**
+	 * 조회가능한 게시글 엔티티를 반환한다.
 	 * @param id 게시글 아이디
 	 * @return 삭제되지 않은 게시글
 	 */
 	@Transactional(readOnly = true)
-	public Post getPost(long id) {
-		return postRepository.findPostByIdWithNotDeleteStatus(id)
+	public Post getActivePost(long id) {
+		return postRepository.findActivePostById(id)
 				.orElseThrow(() -> {
 					log.info("Post {} Not Found", id);
 					return new NotFoundException("Post Not Found");
 				});
 	}
 
-	@Transactional(readOnly = true)
-	public List<Post> getPosts(Long cursor, int limit, PostOrder postOrder) {
-		PageRequest pageable = PageRequest.of(0, limit + 1);
-		if (postOrder == PostOrder.N) {
-			return postRepository.findPostsByCreatedAt(cursor, pageable);
-		} else if (postOrder == PostOrder.V) {
-			return postRepository.findPostsByViewCount(cursor, pageable);
-		} else {
-			throw new BadRequestException("Invalid order type: " + postOrder);
-		}
-	}
-
-	/**
-	 * 게시글 목록을 가져온다.
-	 * @param cursor    현재 커서 위치
-	 * @param postOrder 정렬 기준
-	 * @return 게시글 목록
-	 */
-	@Transactional(readOnly = true)
-	public PostListResDto getPostList(Long cursor, PostOrder postOrder) {
-		int limit = 10;
-		List<Post> posts = getPosts(cursor, limit, postOrder);
-
-		// 사용자 아이디를 중복되지 않게 추출한다.
-		Set<Long> userIds = posts.stream()
-				.map(Post::getUserId)
-				.collect(Collectors.toSet());
-		UsersListDto listDto = new UsersListDto(UserContext.getUserId(), userIds);
-		UsersList usersList = usersGatewayService.requestUserInfos(listDto);
-
-		List<PostSummaryResDto> postList = posts.stream().map(post -> {
-			UsersResDto writerInfo = usersList.userList().stream()
-					.filter(u -> Objects.equals(u.id(), post.getUserId()))
-					.findFirst()
-					.orElse(new UsersResDto(0L, "삭제된 사용자", null, null, 0));
-			long viewCount = postViewRepository.countByIdPostId(post.getId());
-			long commentCount = getCommentsCount(post.getId());
-			return new PostSummaryResDto(
-					writerInfo,
-					post.getId(),
-					post.getSubject(),
-					post.getSummary(),
-					viewCount,
-					commentCount,
-					post.getCreatedAt()
-			);
-		}).toList();
-
-		// 다음 게시글이 있는지 확인한다.
-		boolean hasMore = posts.size() > limit;
-		long nextCursor = postList.isEmpty() ? null : postList.get(postList.size() - 1).postId();
-		return new PostListResDto(postList, nextCursor, hasMore);
-	}
-
 	@Transactional
-	public PostResDto getPostDetail(long postId) {
-		Post post = getPost(postId);
-		UsersResDto usersInfo = usersGatewayService.requestUserInfo(post.getUserId());
+	public PostDto getPost(long postId) {
+		Post post = getActivePost(postId);
+		UsersDto usersInfo = usersGatewayService.requestUserInfo(post.getUserId());
 
 		// 사용자일 경우 토큰으로 조회수를 올린다.
 		if (UserContext.isLogin()) {
 			long userId = UserContext.getUserId();
-			if (isNotReadPost(postId, userId)) {
-				increaseViewCount(postId, userId);
+			PostViewId postViewId = PostViewId.of(postId, userId);
+			if (!postViewRepository.existsById(postViewId)) {
+				PostView postView = new PostView(postViewId);
+				post.addPostView(postView);
+				postViewRepository.save(postView);
 			}
 		}
-		long viewCount = getViewCount(postId);
-		return new PostResDto(usersInfo, PostDetailResDto.from(post, viewCount));
+
+		long viewCount = postViewRepository.countByIdPostId(postId);
+		return new PostDto(usersInfo, PostInfoDto.from(post, viewCount));
 	}
 
+	/**
+	 * 게시글을 생성한다. <br />
+	 * 생성된 게시글의 URI는 프론트에서 사용한다.
+	 * @param createDto	게시글 생성 객체
+	 * @return 생성된 게시글 주소(ex. /post/1)
+	 */
 	@Transactional
-	public void increaseViewCount(Long postId, Long userId) {
-		PostViewId postViewId = new PostViewId(postId, userId);
-		postViewRepository.save(new PostView(postViewId));
-	}
+	public URI savePost(PostCreateDto createDto) {
+		Post post = createPost(createDto);
 
-	@Transactional(readOnly = true)
-	public boolean isNotReadPost(Long postId, Long userId) {
-		PostViewId postViewId = new PostViewId(postId, userId);
-		return !postViewRepository.existsById(postViewId);
-	}
-
-	@Transactional(readOnly = true)
-	public long getViewCount(Long postId) {
-		return postViewRepository.countByIdPostId(postId);
-	}
-
-	@Transactional(readOnly = true)
-	public long getCommentsCount(Long postId) {
-		return commentRepository.countByPostId(postId);
-	}
-
-	@Transactional
-	public URI savePost(PostCreateReqDto createReqDTO) {
-		long userId = UserContext.getUserId();
-		if (groupService.isWriteRestricted(GroupUserId.of(userId, createReqDTO.groupId()))) {
-			throw new UnauthorizedAccessException("write denied");
+		// 그룹 체크(사용자 게시판일 경우 넘어감)
+		if (createDto.groupDto().isGroupPost()) {
+			long groupId = createDto.groupDto().groupId();
+			groupService.isWriteRestricted(groupId);
+			Groups groups = groupService.getGroup(groupId);
+			groups.addPostInGroup(post);
 		}
-
-		Groups groups = groupService.getGroup(createReqDTO.groupId());
-		GroupUsers groupUser = groups.getGroupUsers().stream()
-				.filter(groupUsers -> groupUsers.getId().getUserId().equals(userId))
-				.findFirst()
-				.orElseThrow(() -> {
-					log.info("User : {}, Not Groups user", userId);
-					return new UnauthorizedAccessException("write denied");
-				});
-
-		// 정지 또는 승인 대기 중인 사용자는 작성 금지
-		if (groupUser.getStatus() == GroupUsersStatus.BAN ||
-				groupUser.getStatus() == GroupUsersStatus.PENDING) {
-			throw new UnauthorizedAccessException("write denied");
-		}
-
-		Post post = createPost(createReqDTO);
-		groups.addPostInGroup(post);
+		
+		// 게시글 생성
 		long postId = postRepository.save(post).getId();
 
 		// 게시글 생성 성공시 구독자에게 알림 발송
-		PostNoticesDto postNoticesDto = new PostNoticesDto(post);
-		kafkaService.sendMsg("new-post", postNoticesDto);
+		PostNoticesKafkaDto postNoticesKafkaDto = PostNoticesKafkaDto.from(post);
+		kafkaService.sendMsg("new-post", postNoticesKafkaDto);
 
 		// 검색 서비스에 추가 발송
-		PostDto postDto = new PostDto(post);
-		kafkaService.sendMsg("post-search", postDto);
+		PostSearchKafkaDto postSearchKafkaDto = new PostSearchKafkaDto(post);
+		kafkaService.sendMsg("post-search", postSearchKafkaDto);
 
 		// 파일 서비스에 이미지 리스트 발송
-		List<String> imgList = createReqDTO.imgList();
-		if (!imgList.isEmpty()) {
-			kafkaService.sendMsg("post-save", imgList);
+		if (!createDto.contentDto().imgUrls().isEmpty()) {
+			PostImgListKafkaDto postImgListKafkaDto = new PostImgListKafkaDto(postId, createDto.contentDto().imgUrls());
+			kafkaService.sendMsg("post-save", postImgListKafkaDto);
+		}
+
+		if (createDto.settingsDto().isThumbnail()) {
+			PostImgKafkaDto postImgKafkaDto = new PostImgKafkaDto(postId, createDto.settingsDto().thumbnailUrl());
+			kafkaService.sendMsg("post-thumbnail", postImgKafkaDto);
 		}
 		return URI.create("/post/" + postId);
 	}
 
 	@Transactional
-	public Post createPost(PostCreateReqDto createReqDTO) {
-		return new Post(
+	public Post createPost(PostCreateDto createReqDTO) {
+		PostContentDto contentDto = createReqDTO.contentDto();
+		if (!StringUtils.hasText(contentDto.subject())) {
+			throw new IllegalArgumentException("Subject cant be empty or blank");
+		}
+
+		if (contentDto.subject().length() > 100) {
+			throw new IllegalArgumentException("길이 100이상은 안됩니다. : " + contentDto.subject().length());
+		}
+
+		if (!StringUtils.hasText(contentDto.content())) {
+			throw new IllegalArgumentException("Content cant be empty or blank");
+		}
+		
+		// 게시글 목록에서 보이는 요약본 생성
+		String summay = extractSummary(contentDto.content());
+
+		PostSettingsDto settingsDto = createReqDTO.settingsDto();
+		Objects.requireNonNull(settingsDto.status());
+		return Post.of(
 				UserContext.getUserId(),
-				createReqDTO.subject(),
-				createReqDTO.content(),
-				extractSummary(createReqDTO.content())
+				contentDto,
+				summay,
+				settingsDto
 		);
 	}
 
 	@Transactional
-	public URI updatePost(PostUpdateReqDto updateReqDTO) {
-		if (groupService.isWriteRestricted(GroupUserId.of(updateReqDTO.userId(), updateReqDTO.groupId()))) {
-			throw new UnauthorizedAccessException("write denied");
+	public void updatePost(PostUpdateDto updateDto) {
+		boolean isGroupPost = updateDto.groupDto().isGroupPost();
+		if (updateDto.groupDto().isGroupPost()) {
+			long groupId = updateDto.groupDto().groupId();
+			groupService.isWriteRestricted(groupId);
 		}
-		Post post = postRepository.findPostByIdAndStatusNot(updateReqDTO.postId(), ContentStatus.DELETE)
+
+		// 기존에 저장된 게시글 엔티티를 영속화한다.
+		Post post = postRepository.findActivePostById(updateDto.postId())
 				.orElseThrow(() -> {
-					log.info("Post {} Not Found", updateReqDTO.postId());
+					log.info("Post {} Not Found", updateDto.postId());
 					return new NotFoundException("Post Not Found");
 				});
-		post.setSubject(updateReqDTO.subject());
-		post.setContent(updateReqDTO.content());
 
-		return URI.create("/post/" + post.getId());
+		if (post.getGroups() == null && isGroupPost) { // 그룹 게시글로 업데이트
+			long groupId = updateDto.groupDto().groupId();
+			groupService.isWriteRestricted(groupId);
+			Groups groups = groupService.getGroup(groupId);
+			groups.addPostInGroup(post);
+		} else if (post.getGroups() != null && !isGroupPost) { // 개인 게시글로 업데이트
+			Groups prevGroups = post.getGroups();
+			prevGroups.removePostInGroup(post);
+		} else if (post.getGroups() != null & isGroupPost) { // 다른 그룹 게시판으로 이동
+			long prevGroupId = post.getGroups().getId();
+			Groups prevGroups = groupService.getGroup(prevGroupId);
+			prevGroups.removePostInGroup(post);
+
+			long groupId = updateDto.groupDto().groupId();
+			groupService.isWriteRestricted(groupId);
+			Groups groups = groupService.getGroup(groupId);
+			groups.addPostInGroup(post);
+		}
+
+		// 게시글 정보 업데이트
+		PostContentDto contentDto = updateDto.contentDto();
+		post.updateSubject(contentDto.subject());
+		post.updateContent(contentDto.content());
+
+		// 게시글 옵션 업데이트
+		PostSettingsDto settingsDto = updateDto.settingsDto();
+		ContentStatus status = settingsDto.status();
+		if (status == ContentStatus.DELETE) {
+			throw new BadRequestException("잘못된 삭제 방법입니다.");
+		}
+		post.updateStatus(status);
+		post.updateUsehumbnail(settingsDto.isThumbnail());
+		post.updateThumbnail(settingsDto.thumbnailUrl());
+
+		if (post.isThumbnail()) {
+			post.updateThumbnail(settingsDto.thumbnailUrl());
+			PostImgKafkaDto postImgKafkaDto = new PostImgKafkaDto(post.getId(), updateDto.settingsDto().thumbnailUrl());
+			kafkaService.sendMsg("post-thumbnail", postImgKafkaDto);
+		}
 	}
 
 	@Transactional
 	public void deletePost(long postId) {
-		Post post = getPost(postId);
-		long userId = UserContext.getUserId();
+		Post post = getActivePost(postId);
 
-		log.info("삭제 게시글 아이디: {}, 유저 아이디: {}", post.getId(), userId);
-		if (!Objects.equals(post.getUserId(), userId)) {
+		long userId = UserContext.getUserId();
+		if (post.getUserId() != userId) {
 			throw new UnauthorizedAccessException("삭제 권한이 없습니다.");
 		}
-		post.setStatus(ContentStatus.DELETE);
+
+		// 그룹 게시글일 경우 그룹과 연관관계를 제거한다.
+		Groups groups = post.getGroups();
+		if (groups != null) {
+			groups.removePostInGroup(post);
+		}
+
+		log.debug("삭제 게시글 아이디: {}, 유저 아이디: {}", post.getId(), userId);
+		post.updateStatus(ContentStatus.DELETE);
+
+		// 해당 게시글과 관련된 이미지들을 모두 삭제한다.
+		kafkaService.sendMsg("post-img-delete", postId);
 	}
 
 	/**

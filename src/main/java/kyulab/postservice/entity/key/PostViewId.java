@@ -15,14 +15,18 @@ import java.util.Objects;
 public class PostViewId implements Serializable {
 
 	@Column(nullable = false)
-	private Long postId;
+	private long postId;
 
 	@Column(nullable = false)
-	private Long userId;
+	private long userId;
 
-	public PostViewId(Long postId, Long userId) {
+	private PostViewId(long postId, long userId) {
 		this.postId = postId;
 		this.userId = userId;
+	}
+
+	public static PostViewId of(long postId, long userId) {
+		return new PostViewId(postId, userId);
 	}
 
 	@Override
@@ -38,8 +42,8 @@ public class PostViewId implements Serializable {
 
 	@Override
 	public int hashCode() {
-		int result = postId != null ? postId.hashCode() : 0;
-		result = 31 * result + (userId != null ? userId.hashCode() : 0);
+		int result = (int) (postId ^ (postId >>> 32));
+		result = 31 * result + (int) (userId ^ (userId >>> 32));
 		return result;
 	}
 

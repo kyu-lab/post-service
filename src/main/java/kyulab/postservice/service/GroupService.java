@@ -1,15 +1,16 @@
 package kyulab.postservice.service;
 
+import kyulab.postservice.domain.group.GroupStatus;
 import kyulab.postservice.domain.group.GroupUsersStatus;
-import kyulab.postservice.dto.kafka.search.GroupDto;
-import kyulab.postservice.dto.req.GroupCreateReqDto;
-import kyulab.postservice.dto.req.GroupUpdateReqDto;
-import kyulab.postservice.dto.res.GroupResDto;
-import kyulab.postservice.dto.res.GroupSearchResDto;
+import kyulab.postservice.dto.kafka.search.GroupKafkaDto;
+import kyulab.postservice.dto.req.GroupCreateDto;
+import kyulab.postservice.dto.req.GroupUpdateDto;
+import kyulab.postservice.dto.res.GroupDto;
 import kyulab.postservice.entity.Groups;
 import kyulab.postservice.entity.GroupUsers;
 import kyulab.postservice.entity.key.GroupUserId;
 import kyulab.postservice.handler.exception.BadRequestException;
+import kyulab.postservice.handler.exception.ForbiddenException;
 import kyulab.postservice.handler.exception.NotFoundException;
 import kyulab.postservice.handler.exception.UnauthorizedAccessException;
 import kyulab.postservice.repository.GroupUsersRepsitory;
@@ -21,8 +22,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.net.URI;
 import java.util.List;
-import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -34,37 +35,33 @@ public class GroupService {
 	private final GroupUsersRepsitory groupUsersRepsitory;
 
 	@Transactional(readOnly = true)
-	public List<GroupResDto> getGroupList() {
-		long userId;
-		try {
-			userId = UserContext.getUserId();
- 		} catch (Exception e) {
-			log.warn("Token required");
-			throw new UnauthorizedAccessException("Token required");
-		}
+	public List<GroupDto> getGroupList() {
+		long userId = UserContext.getUserId();
 		return groupUsersRepsitory.findByIdUserId(userId).stream()
 				.map(GroupUsers::getGroups)
-				.map(GroupResDto::from)
+				.map(GroupDto::from)
 				.toList();
 	}
 
 	@Transactional(readOnly = true)
-	public List<GroupSearchResDto> searchGroup(String name) {
-		// todo : 현재는 공개 그룹만 검색됨, 비공개 그룹 처리 필요
-		List<Groups> groups = groupRepository.searchGroupNotPrivate("%" + name + "%");
-
-		return groups.stream()
-				.map(GroupSearchResDto::from)
-				.collect(Collectors.toList());
-	}
-
-	@Transactional(readOnly = true)
-	public Groups getGroup(Long id) {
-		return groupRepository.findById(id)
+	public Groups getGroup(long id) {
+		return groupRepository.findActiveGroupById(id)
 				.orElseThrow(() -> {
 					log.info("User {} Not Found", id);
 					return new NotFoundException("User Not Found");
 				});
+	}
+
+	@Transactional(readOnly = true)
+	public Groups getGroupInfo(long groupId) {
+		Groups groups = getGroup(groupId);
+		if (groups.getStatus() == GroupStatus.PRIVATE) {
+			GroupUserId groupUserId = GroupUserId.of(UserContext.getUserId(), groupId);
+			if (groupUsersRepsitory.existsById(groupUserId)) {
+				throw new ForbiddenException("접근 권한이 없습니다.");
+			}
+		}
+		return groups;
 	}
 
 	@Transactional(readOnly = true)
@@ -77,40 +74,48 @@ public class GroupService {
 		return groupUsersRepsitory.findById(groupUserId)
 				.orElseThrow(() -> {
 					log.info("User {} Not Found In group : {}", groupUserId.getUserId(), groupUserId.getGroupId());
-					return new UnauthorizedAccessException("User Not Found");
+					return new UnauthorizedAccessException("User Not Found In Group");
 				});
 	}
 
+	/**
+	 * 로그인한 사용자의 그룹 권한 여부를 확인합니다.
+	 * @param groupId 그룹 아이디
+	 * @throws UnauthorizedAccessException  권한 부족시
+	 */
 	@Transactional(readOnly = true)
-	public boolean isWriteRestricted(GroupUserId groupUserId) {
+	public void isWriteRestricted(long groupId) {
+		GroupUserId groupUserId = GroupUserId.of(UserContext.getUserId(), groupId);
 		GroupUsers groupUser = getGroupUser(groupUserId);
 
 		// 정지 또는 승인 대기 중인 사용자는 작성 금지
-		return groupUser.getStatus() == GroupUsersStatus.BAN ||
-				groupUser.getStatus() == GroupUsersStatus.PENDING;
+		if (groupUser.getStatus() == GroupUsersStatus.BAN ||
+				groupUser.getStatus() == GroupUsersStatus.PENDING) {
+			throw new UnauthorizedAccessException("권한이 부족합니다.");
+		}
 	}
 
 	@Transactional
-	public GroupResDto saveGroup(GroupCreateReqDto createReqDTO) {
-		if (existsByName(createReqDTO.name())) {
+	public URI saveGroup(GroupCreateDto createDto) {
+		if (existsByName(createDto.name())) {
 			throw new BadRequestException("Already Exsits");
 		}
 
-		Groups newGroups = groupRepository.save(new Groups(createReqDTO));
-		GroupUsers newGroupUsers = new GroupUsers(
+		Groups newGroups = groupRepository.save(Groups.of(createDto));
+		GroupUsers newGroupUsers = GroupUsers.of(
 				GroupUserId.of(UserContext.getUserId(), newGroups.getId())
 		);
 		newGroups.addGroupUsers(newGroupUsers);
 		groupUsersRepsitory.save(newGroupUsers);
 
 		// 그룹 검색을 위해 추가
-		GroupDto groupDto = new GroupDto(newGroups);
-		kafkaService.sendMsg("group-search", groupDto);
-		return GroupResDto.from(newGroups);
+		GroupKafkaDto groupKafkaDto = GroupKafkaDto.from(newGroups);
+		kafkaService.sendMsg("group-search", groupKafkaDto);
+		return URI.create("/group/" + newGroups.getId());
 	}
 
 	@Transactional
-	public GroupResDto updateGroup(GroupUpdateReqDto updateReqDto) {
+	public GroupDto updateGroup(GroupUpdateDto updateReqDto) {
 		if (existsByName(updateReqDto.name())) {
 			throw new NotFoundException("존재하지 않는 그룹입니다.");
 		}
@@ -136,10 +141,11 @@ public class GroupService {
 		}
 
 		// 수정
-		groups.setName(updateReqDto.name());
-		groups.setImgUrl(updateReqDto.imgUrl());
-		groups.setStatus(updateReqDto.groupStatus());
-		return GroupResDto.from(groups);
+		groups.updateName(updateReqDto.name());
+		groups.updateIconUrl(updateReqDto.iconUrl());
+		groups.updateBannerUrl(updateReqDto.bannerUrl());
+		groups.updateGroupStatus(updateReqDto.groupStatus());
+		return GroupDto.from(groups);
 	}
 
 }
