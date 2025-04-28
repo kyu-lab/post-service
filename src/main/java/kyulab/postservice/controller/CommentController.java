@@ -1,14 +1,13 @@
 package kyulab.postservice.controller;
 
-import kyulab.postservice.dto.req.CommentCreateReqDto;
-import kyulab.postservice.dto.req.CommentUpdateReqDto;
-import kyulab.postservice.dto.res.CommentResDto;
+import kyulab.postservice.domain.content.ContentOrder;
+import kyulab.postservice.dto.req.CommentCreateDto;
+import kyulab.postservice.dto.req.CommentUpdateDto;
+import kyulab.postservice.dto.res.CommentListDto;
 import kyulab.postservice.service.CommentService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
 
 @RestController
 @RequestMapping("/api/comment")
@@ -17,20 +16,31 @@ public class CommentController {
 
 	private final CommentService commentService;
 
-	@GetMapping("/{postId}")
-	public ResponseEntity<List<CommentResDto>> getComments(@PathVariable long postId) {
-		return ResponseEntity.ok(commentService.getCommentsWithUserInfo(postId));
+	@GetMapping
+	public ResponseEntity<CommentListDto> getComments(
+			@RequestParam long postId,
+			@RequestParam(required = false) Long cursor,
+			@RequestParam(required = false, defaultValue = "N") ContentOrder contentOrder) {
+		return ResponseEntity.ok(commentService.getComments(postId, cursor, contentOrder));
+	}
+
+	@GetMapping("/child")
+	public ResponseEntity<CommentListDto> getChildComments(
+			@RequestParam long postId,
+			@RequestParam long parentId,
+			@RequestParam(required = false) Long cursor) {
+		return ResponseEntity.ok(commentService.getChildComments(postId, parentId, cursor));
 	}
 
 	@PostMapping
-	public ResponseEntity<String> saveComment(@RequestBody CommentCreateReqDto createReqDTO) {
-		commentService.saveComment(createReqDTO);
+	public ResponseEntity<String> saveComment(@RequestBody CommentCreateDto createDto) {
+		commentService.saveComment(createDto);
 		return ResponseEntity.ok().build();
 	}
 
 	@PutMapping
-	public ResponseEntity<String> updateComment(@RequestBody CommentUpdateReqDto updateReqDto) {
-		commentService.updateComment(updateReqDto);
+	public ResponseEntity<String> updateComment(@RequestBody CommentUpdateDto updateDto) {
+		commentService.updateComment(updateDto);
 		return ResponseEntity.ok().build();
 	}
 

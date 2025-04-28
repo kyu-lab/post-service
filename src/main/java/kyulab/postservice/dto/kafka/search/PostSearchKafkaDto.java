@@ -7,7 +7,7 @@ import lombok.Getter;
 import java.time.LocalDate;
 
 @Getter
-public class PostDto {
+public class PostSearchKafkaDto {
 	private final long postId;
 
 	private final String subject;
@@ -15,7 +15,7 @@ public class PostDto {
 	@JsonFormat(pattern = "yyyy-MM-dd")
 	private final LocalDate createdAt;
 
-	public PostDto(Post post) {
+	public PostSearchKafkaDto(Post post) {
 		this.postId = post.getId();
 		this.subject = post.getSubject();
 		this.createdAt = post.getCreatedAt().toLocalDate();

@@ -13,7 +13,7 @@ import java.util.Base64;
 @Component
 public class SecretUtil {
 
-	@Value("${jwt.access-token:}")
+	@Value("${jwt.access-token:access}")
 	private String accessKeyOrigin;
 	private SecretKey accessKey;
 
@@ -27,6 +27,5 @@ public class SecretUtil {
 	public SecretKey getAccessKey() {
 		return this.accessKey;
 	}
-
 
 }

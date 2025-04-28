@@ -2,8 +2,7 @@ package kyulab.postservice.entity;
 
 import jakarta.persistence.*;
 import kyulab.postservice.domain.group.GroupStatus;
-import kyulab.postservice.dto.gateway.UsersGroupCreateDto;
-import kyulab.postservice.dto.req.GroupCreateReqDto;
+import kyulab.postservice.dto.req.GroupCreateDto;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -32,7 +31,12 @@ public class Groups {
 	)
 	private String name;
 
-	private String imgUrl; // 그룹 로고
+	@Column(length = 100)
+	private String description;
+
+	private String iconUrl;
+
+	private String bannerUrl;
 
 	@Enumerated(EnumType.STRING)
 	private GroupStatus status;
@@ -41,44 +45,34 @@ public class Groups {
 		mappedBy = "groups",
 		fetch = FetchType.LAZY
 	)
-	private List<Post> postList = new ArrayList<>();
+	private final List<Post> postList = new ArrayList<>();
 
 	@OneToMany(
 		mappedBy = "groups",
 		fetch = FetchType.LAZY
 	)
-	private List<GroupUsers> groupUsers = new ArrayList<>();
+	private final List<GroupUsers> groupUsers = new ArrayList<>();
 
 	@CreatedDate
 	@Column(updatable = false)
 	private LocalDateTime createdAt;
 
-	/**
-	 * 그룹 생성
-	 * @param createReqDTO 그룹 데이터
-	 */
-	public Groups(GroupCreateReqDto createReqDTO) {
-		Assert.hasText(createReqDTO.name(), "Groups must not be null");
-
-		GroupStatus groupStatus = GroupStatus.PUBLIC;
-		if (createReqDTO.groupStatus() != null) {
-			groupStatus = createReqDTO.groupStatus();
-		}
-
-		this.name = createReqDTO.name();
-		this.imgUrl = createReqDTO.imgUrl();
-		this.status = groupStatus;
+	private Groups(String name, String description, String iconUrl, String bannerUrl, GroupStatus status) {
+		this.name = name;
+		this.description = description;
+		this.iconUrl = iconUrl;
+		this.bannerUrl = bannerUrl;
+		this.status = status;
 	}
 
-	/**
-	 * 사용자 그룹 생성
-	 * @param createReqDTO 사용자 데이터
-	 */
-	public Groups(UsersGroupCreateDto createReqDTO) {
-		Assert.hasText(createReqDTO.name(), "Groups must not be null");
-		this.name = createReqDTO.name();
-		this.imgUrl = createReqDTO.imgUrl();
-		this.status = GroupStatus.USER;
+	public static Groups of(GroupCreateDto createReqDTO) {
+		return new Groups(
+				createReqDTO.name(),
+				createReqDTO.description(),
+				createReqDTO.iconUrl(),
+				createReqDTO.bannerUrl(),
+				createReqDTO.groupStatus()
+		);
 	}
 
 	public void addPostInGroup(Post post) {
@@ -87,21 +81,31 @@ public class Groups {
 		post.setGroups(this);
 	}
 
+	public void removePostInGroup(Post post) {
+		Assert.notNull(post, "Post cannot be null");
+		this.postList.remove(post);
+		post.setGroups(null);
+	}
+
 	public void addGroupUsers(GroupUsers groupUser) {
 		Assert.notNull(groupUser, "Post cannot be null");
 		this.groupUsers.add(groupUser);
 		groupUser.setGroups(this);
 	}
 
-	public void setName(String name) {
+	public void updateName(String name) {
 		this.name = name;
 	}
 
-	public void setImgUrl(String imgUrl) {
-		this.imgUrl = imgUrl;
+	public void updateIconUrl(String iconUrl) {
+		this.iconUrl = iconUrl;
 	}
 
-	public void setStatus(GroupStatus status) {
+	public void updateBannerUrl(String bannerUrl) {
+		this.bannerUrl = bannerUrl;
+	}
+
+	public void updateGroupStatus(GroupStatus status) {
 		this.status = status;
 	}
 

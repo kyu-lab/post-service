@@ -1,7 +1,9 @@
 package kyulab.postservice.service.gateway;
 
-import kyulab.postservice.dto.gateway.UsersList;
-import kyulab.postservice.dto.gateway.UsersResDto;
+import kyulab.postservice.dto.gateway.req.UsersReqDto;
+import kyulab.postservice.dto.gateway.res.UsersListDto;
+import kyulab.postservice.dto.gateway.res.UsersDto;
+import kyulab.postservice.utils.UserContext;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -31,16 +33,17 @@ public class UsersGatewayService {
 
 	/**
 	 * 사용자 서비스(users-serivce)에게 사용자들의 정보를 요청한 후 반환한다.
-	 * @param userIds 요청할 사용자 정보 목록
+	 * @param userIds 데이터를 받을 사용자 목록
 	 * @return 사용자 정보 목록
 	 */
-	public UsersList requestUserInfos(Set<Long> userIds) {
-		HttpEntity<Set<Long>> request = new HttpEntity<>(userIds);
+	public UsersListDto requestUserInfos(Set<Long> userIds) {
+		UsersReqDto listDto = new UsersReqDto(UserContext.getUserId(), userIds);
+		HttpEntity<UsersReqDto> request = new HttpEntity<>(listDto);
 		return restTemplate.exchange(
 				gateway + userPath,
 				HttpMethod.POST,
 				request,
-				new ParameterizedTypeReference<UsersList>() {}
+				new ParameterizedTypeReference<UsersListDto>() {}
 		).getBody();
 	}
 
@@ -49,10 +52,10 @@ public class UsersGatewayService {
 	 * @param userId 요청할 사용자 정보
 	 * @return 사용자 정보 목록
 	 */
-	public UsersResDto requestUserInfo(Long userId) {
+	public UsersDto requestUserInfo(Long userId) {
 		String userServiceUrl = gateway + userPath + "/" + userId;
 		try {
-			return restTemplate.getForObject(userServiceUrl, UsersResDto.class);
+			return restTemplate.getForObject(userServiceUrl, UsersDto.class);
 		} catch (HttpClientErrorException h) {
 			log.error("users-service와 연결 안됨 : {}", h.getMessage());
 			throw new HttpClientErrorException(HttpStatus.SERVICE_UNAVAILABLE, "users-service와 연결에 실패하였습니다.");

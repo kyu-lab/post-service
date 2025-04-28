@@ -15,26 +15,24 @@ import java.util.Objects;
 @Embeddable
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class GroupUserId implements Serializable {
-	private static final Map<String, GroupUserId> CACHE = new HashMap<>();
-
 	@Column(
 		name = "user_id",
 		nullable = false
 	)
-	private Long userId;
+	private long userId;
 
 	@Column(
 		name = "group_id",
 		nullable = false
 	)
-	private Long groupId;
+	private long groupId;
 
-	private GroupUserId(Long userId, Long groupId) {
+	private GroupUserId(long userId, long groupId) {
 		this.userId = userId;
 		this.groupId = groupId;
 	}
 
-	public static GroupUserId of(Long userId, Long groupId) {
+	public static GroupUserId of(long userId, long groupId) {
 		return new GroupUserId(userId, groupId);
 	}
 
@@ -51,8 +49,8 @@ public class GroupUserId implements Serializable {
 
 	@Override
 	public int hashCode() {
-		int result = userId != null ? userId.hashCode() : 0;
-		result = 31 * result + (groupId != null ? groupId.hashCode() : 0);
+		int result = (int) (userId ^ (userId >>> 32));
+		result = 31 * result + (int) (groupId ^ (groupId >>> 32));
 		return result;
 	}
 
