@@ -1,4 +1,4 @@
-package kyulab.postservice.dto.res;
+package kyulab.postservice.vo;
 
 import kyulab.postservice.domain.content.ContentStatus;
 import lombok.Getter;
@@ -8,7 +8,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Getter
-public class CommentListItemDto {
+public class CommentItemVO {
 
 	private final long id;
 
@@ -22,11 +22,11 @@ public class CommentListItemDto {
 
 	private final LocalDateTime createdAt;
 
-	private List<CommentListItemDto> child = new ArrayList<>();
+	private List<CommentItemVO> child = new ArrayList<>();
 
 	private long childCount;
 
-	public CommentListItemDto(long id, long userId, Long parentId, String content, ContentStatus status, LocalDateTime createdAt) {
+	public CommentItemVO(long id, long userId, Long parentId, String content, ContentStatus status, LocalDateTime createdAt) {
 		this.id = id;
 		this.userId = userId;
 		this.parentId = parentId;
@@ -35,7 +35,7 @@ public class CommentListItemDto {
 		this.createdAt = createdAt;
 	}
 
-	public void setChild(List<CommentListItemDto> child) {
+	public void setChild(List<CommentItemVO> child) {
 		this.child = child;
 	}
 

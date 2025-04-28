@@ -1,6 +1,6 @@
 package kyulab.postservice.repository;
 
-import kyulab.postservice.dto.res.CommentListItemDto;
+import kyulab.postservice.vo.CommentItemVO;
 import kyulab.postservice.entity.Comments;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -24,7 +24,7 @@ public interface CommentRepository extends JpaRepository<Comments, Long> {
 
 	@Query("""
 		select
-		new kyulab.postservice.dto.res.CommentListItemDto(
+		new kyulab.postservice.vo.CommentItemVO(
 			c.id, c.userId, c.parent.id, c.content, c.status, c.createdAt
 		)
 		from Comments c
@@ -34,12 +34,12 @@ public interface CommentRepository extends JpaRepository<Comments, Long> {
 		group by c.id
 		order by c.createdAt desc
 	""")
-	List<CommentListItemDto> findNewCommentsByCurosr(@Param("postId") long postId, @Param("cursor") Long cursor, Pageable pageable);
+	List<CommentItemVO> findNewCommentsByCurosr(@Param("postId") long postId, @Param("cursor") Long cursor, Pageable pageable);
 
 	// todo : 미구현 ㅜ, 댓글은 대댓글 많은순, 좋아요 순으로 해야할듯?..
 	@Query("""
 		select
-		new kyulab.postservice.dto.res.CommentListItemDto(
+		new kyulab.postservice.vo.CommentItemVO(
 			c.id, c.userId, c.parent.id, c.content, c.status, c.createdAt
 		)
 		from Comments c
@@ -47,11 +47,11 @@ public interface CommentRepository extends JpaRepository<Comments, Long> {
 		group by c.id
 		order by c.createdAt desc
 	""")
-	List<CommentListItemDto> findMostViewCommentsByCurosr(@Param("postId") long postId, @Param("cursor") Long cursor, Pageable pageable);
+	List<CommentItemVO> findMostViewCommentsByCurosr(@Param("postId") long postId, @Param("cursor") Long cursor, Pageable pageable);
 
 	@Query("""
 		select
-		new kyulab.postservice.dto.res.CommentListItemDto(
+		new kyulab.postservice.vo.CommentItemVO(
 			c.id, c.userId, c.parent.id, c.content, c.status, c.createdAt
 		)
 		from Comments c
@@ -59,9 +59,8 @@ public interface CommentRepository extends JpaRepository<Comments, Long> {
 		and c.parent.id = :parentId
 		and (:cursor IS NULL OR c.id < :cursor)
 		group by c.id
-		order by c.createdAt desc
 	""")
-	List<CommentListItemDto> findChildComments(@Param("postId") long postId, @Param("parentId") long parentId, Long cursor, Pageable pageable);
+	List<CommentItemVO> findChildComments(@Param("postId") long postId, @Param("parentId") long parentId, Long cursor, Pageable pageable);
 
 	@Query("""
 		select c
