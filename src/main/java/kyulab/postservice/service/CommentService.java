@@ -7,7 +7,7 @@ import kyulab.postservice.dto.req.CommentCreateDto;
 import kyulab.postservice.dto.req.CommentUpdateDto;
 import kyulab.postservice.dto.res.CommentItemDto;
 import kyulab.postservice.dto.res.CommentListDto;
-import kyulab.postservice.dto.res.CommentListItemDto;
+import kyulab.postservice.vo.CommentItemVO;
 import kyulab.postservice.entity.Comments;
 import kyulab.postservice.entity.Post;
 import kyulab.postservice.handler.exception.BadRequestException;
@@ -35,7 +35,7 @@ public class CommentService {
 	private final CommentRepository commentRepository;
 
 	@Transactional(readOnly = true)
-	public List<CommentListItemDto> getCommentsByOrder(long postId, Long cursor, ContentOrder contentOrder, int limit) {
+	public List<CommentItemVO> getCommentsByOrder(long postId, Long cursor, ContentOrder contentOrder, int limit) {
 		// 한 번에 가져올 댓글을 10개로 고정
 		PageRequest pageable = PageRequest.of(0, limit + 1);
 		if (contentOrder == ContentOrder.N) {
@@ -52,41 +52,56 @@ public class CommentService {
 		int limit = 10;
 
 		// 1. 댓글을 가져온다.
-		List<CommentListItemDto> commentListItemDtos = getCommentsByOrder(postId, cursor, contentOrder, limit);
+		List<CommentItemVO> commentItemVO = getCommentsByOrder(postId, cursor, contentOrder, limit);
 
-		// 2. 대댓글을 조회한다.
-		for (CommentListItemDto itemDto : commentListItemDtos) {
+		// 2. 대댓글을 조회와 사용자 아이디를 추출한다.
+		Set<Long> userIds = new HashSet<>();
+		for (CommentItemVO itemDto : commentItemVO) {
+			userIds.add(itemDto.getUserId());
 			long childCount = commentRepository.countCommentsByParentId(itemDto.getId());
 			if (childCount == 0) {
 				continue;
 			}
-			List<CommentListItemDto> child = commentRepository.findChildComments(
+			List<CommentItemVO> childs = commentRepository.findChildComments(
 					postId, itemDto.getId(), null, PageRequest.of(0, 2)
 			);
 			itemDto.setChildCount(childCount);
-			itemDto.setChild(child);
+			itemDto.setChild(childs);
+
+			for (CommentItemVO child : childs) {
+				long childReplyCount = commentRepository.countCommentsByParentId(child.getId());
+				userIds.add(child.getUserId());
+				child.setChildCount(childReplyCount);
+			}
 		}
 
-		// 3. 댓글에서 사용자 아이디를 추출한다.
-		Set<Long> userIds = commentListItemDtos.stream()
-				.map(CommentListItemDto::getUserId)
-				.collect(Collectors.toSet());
-
-		// 4. 사용자 서비스에게 사용자 아이디 정보를 가져온다.
+		// 3. 사용자 서비스에게 사용자 아이디 정보를 가져온다.
 		UsersListDto usersListDto = usersGatewayService.requestUserInfos(userIds);
 
-		// 5. 사용자 정보와 댓글을 합친다.
-		List<CommentItemDto> commentList = commentListItemDtos.stream().map(comment -> {
+		// 4. 사용자 정보와 댓글을 합친다.
+		List<CommentItemDto> commentList = commentItemVO.stream().map(comment -> {
 			UsersDto userInfo = usersListDto.userList().stream()
 					.filter(u -> Objects.equals(u.id(), comment.getUserId()))
 					.findFirst()
 					.orElse(UsersDto.deleteUser());
-			return new CommentItemDto(userInfo, comment);
+
+			// 대댓글이 있는 댓글이라면
+			List<CommentItemDto> childCommentList = null;
+			if (comment.getChildCount() > 0) {
+				childCommentList = comment.getChild().stream().map(child -> {
+					UsersDto childUserInfo = usersListDto.userList().stream()
+							.filter(u -> Objects.equals(u.id(), comment.getUserId()))
+							.findFirst()
+							.orElse(UsersDto.deleteUser());
+					return CommentItemDto.from(childUserInfo, child, null);
+				}).toList();
+			}
+			return CommentItemDto.from(userInfo, comment, childCommentList);
 		}).toList();
 
 		// 6. 다음 댓글이 있는지 확인한다.
-		boolean hasMore = commentListItemDtos.size() > limit;
-		Long nextCursor = commentListItemDtos.isEmpty() ? null : commentListItemDtos.get(commentListItemDtos.size() - 1).getId();
+		boolean hasMore = commentItemVO.size() > limit;
+		Long nextCursor = commentItemVO.isEmpty() ? null : commentItemVO.get(commentItemVO.size() - 1).getId();
 
 		return new CommentListDto(commentList, nextCursor, hasMore);
 	}
@@ -97,28 +112,28 @@ public class CommentService {
 		PageRequest pageable = PageRequest.of(0, limit + 1);
 
 		// 1. 대댓글을 가져온다.
-		List<CommentListItemDto> commentListItemDtos = commentRepository.findChildComments(postId, parentId, cursor, pageable);
+		List<CommentItemVO> commentItemVOS = commentRepository.findChildComments(postId, parentId, cursor, pageable);
 
 		// 2. 댓글에서 사용자 아이디를 추출한다.
-		Set<Long> userIds = commentListItemDtos.stream()
-				.map(CommentListItemDto::getUserId)
+		Set<Long> userIds = commentItemVOS.stream()
+				.map(CommentItemVO::getUserId)
 				.collect(Collectors.toSet());
 
 		// 3. 사용자 서비스에게 사용자 아이디 정보를 가져온다.
 		UsersListDto usersListDto = usersGatewayService.requestUserInfos(userIds);
 
 		// 4. 사용자 정보와 댓글을 합친다.
-		List<CommentItemDto> commentList = commentListItemDtos.stream().map(comment -> {
+		List<CommentItemDto> commentList = commentItemVOS.stream().map(comment -> {
 			UsersDto userInfo = usersListDto.userList().stream()
 					.filter(u -> Objects.equals(u.id(), comment.getUserId()))
 					.findFirst()
 					.orElse(UsersDto.deleteUser());
-			return new CommentItemDto(userInfo, comment);
+			return CommentItemDto.from(userInfo, comment, null);
 		}).toList();
 
 		// 5. 다음 댓글이 있는지 확인한다.
-		boolean hasMore = commentListItemDtos.size() > limit;
-		Long nextCursor = commentListItemDtos.isEmpty() ? null : commentListItemDtos.get(commentListItemDtos.size() - 1).getId();
+		boolean hasMore = commentItemVOS.size() > limit;
+		Long nextCursor = commentItemVOS.isEmpty() ? null : commentItemVOS.get(commentItemVOS.size() - 1).getId();
 
 		return new CommentListDto(commentList, nextCursor, hasMore);
 	}

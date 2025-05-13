@@ -180,7 +180,7 @@ class PostServiceApplicationTests {
 		CommentListDto commentListDto = commentService.getChildComments(postId, 1L, null);
 
 		// then
-		long prevId = commentListDto.commentItems().get(0).commentListItemDto().getId();
+		long prevId = commentListDto.commentItems().get(0).commentInfoDto().id();
 		for (int i = 0; i < 50; i++) {
 			Long nextCursor = commentListDto.nextCursor();
 			if (nextCursor == null && !commentListDto.hasMore()) {
@@ -188,7 +188,7 @@ class PostServiceApplicationTests {
 			}
 			commentListDto = commentService.getChildComments(postId, 1L, nextCursor);
 			assertNotNull(commentListDto.commentItems());
-			long curId = commentListDto.commentItems().get(0).commentListItemDto().getId();
+			long curId = commentListDto.commentItems().get(0).commentInfoDto().id();
 			assertNotEquals(prevId, curId);
 			prevId = curId;
 		}
