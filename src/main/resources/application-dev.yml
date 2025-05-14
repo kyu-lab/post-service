@@ -51,7 +51,7 @@ logging:
     org.springframework.kafka: INFO
     org.springframework.data.jpa: DEBUG
     org.hibernate.type.descriptor.sql.BasicBinder: TRACE
-    org.hibernate.type.descriptor.sql.BasicExtractor: TRACE
+    org.hibernate.type.descriptor.sql.BasicExtractor: DEBUG
 jwt:
   access-token: SGVsbG9AI2UzV3JvbGQhQCN9RHxkc2prZC0oOTBNeVNlY3JldCEyMyRGREcjMw==
 gateway:
