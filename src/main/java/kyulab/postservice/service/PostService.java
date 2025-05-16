@@ -195,15 +195,11 @@ public class PostService {
 			throw new IllegalArgumentException("Content cant be empty or blank");
 		}
 		
-		// 게시글 목록에서 보이는 요약본 생성
-		String summay = extractSummary(contentDto.content());
-
 		PostSettingsDto settingsDto = createReqDTO.settingsDto();
 		Objects.requireNonNull(settingsDto.status());
 		return Post.of(
 				UserContext.getUserId(),
 				contentDto,
-				summay,
 				settingsDto
 		);
 	}
@@ -284,43 +280,6 @@ public class PostService {
 
 		// 해당 게시글과 관련된 이미지들을 모두 삭제한다.
 		kafkaService.sendMsg("post-img-delete", postId);
-	}
-
-	/**
-	 * 본문 글에서 글자를 추출해 짧은 요약글로 만든다.
-	 * @param content 본문
-	 * @return 요약글
-	 */
-	private String extractSummary(String content) {
-		if (!StringUtils.hasText(content)) {
-			return "";
-		}
-
-		// 1. <br> 또는 <br/>를 줄바꿈(\n)으로 변환
-		String withBreaks = content.replaceAll("(?i)<br\\s*/?>", "\n");
-
-		// 2. 나머지 HTML 태그 제거 및 100자 이상은 잘라버린다.
-		String plainText = withBreaks.replaceAll("<[^>]+>", "").trim();
-
-		// 3. 줄 단위로 나누기
-		String[] lines = plainText.split("\n");
-
-		// 4. 3줄까지만 취하기
-		int maxLines = Math.min(lines.length, 3);
-		StringBuilder summary = new StringBuilder();
-		for (int i = 0; i < maxLines; i++) {
-			summary.append(lines[i].trim());
-			if (i < maxLines - 1) {
-				summary.append("\n"); // 줄바꿈 유지
-			}
-		}
-
-		// 5. 3줄 이상이었으면 "..." 추가
-		if (lines.length > 3) {
-			summary.append("...");
-		}
-
-		return summary.toString();
 	}
 
 }
