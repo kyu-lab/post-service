@@ -7,5 +7,6 @@ public enum ContentOrder {
 	
 	N, // 최신순
 	V, // 조회순
+	O, // 오래된순
 	
 }

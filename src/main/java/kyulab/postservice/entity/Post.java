@@ -7,6 +7,9 @@ import kyulab.postservice.dto.req.PostSettingsDto;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.select.Elements;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 import org.springframework.util.StringUtils;
 
@@ -47,16 +50,16 @@ public class Post extends ContentEntity {
 	@ManyToOne(fetch = FetchType.LAZY)
 	private Groups groups;
 
-	private Post(long userId, PostContentDto contentDto, String summay, PostSettingsDto settingsDto) {
+	private Post(long userId, PostContentDto contentDto, PostSettingsDto settingsDto) {
 		super(userId, contentDto.content(), settingsDto.status());
 		this.subject = contentDto.subject();
-		this.summary = summary;
+		this.summary = extractSummary(contentDto.content());
 		this.isThumbnail = settingsDto.isThumbnail();
 		this.thumbnailUrl = settingsDto.thumbnailUrl();
 	}
 
-	public static Post of(long userId, PostContentDto contentDto, String summay, PostSettingsDto settingsDto) {
-		return new Post(userId, contentDto, summay, settingsDto);
+	public static Post of(long userId, PostContentDto contentDto, PostSettingsDto settingsDto) {
+		return new Post(userId, contentDto, settingsDto);
 	}
 
 	public void updateSubject(String subject) {
@@ -67,6 +70,7 @@ public class Post extends ContentEntity {
 		if (subject.length() > 100) {
 			throw new IllegalArgumentException("길이 100이상은 안됩니다. : " + subject.length());
 		}
+
 		this.subject = subject;
 	}
 
@@ -100,6 +104,29 @@ public class Post extends ContentEntity {
 
 	public void setGroups(Groups groups) {
 		this.groups = groups;
+	}
+
+	/**
+	 * 본문 글에서 글자를 추출해 짧은 요약글로 만든다. <br/>
+	 * 최대 150글자에 3줄까지 가능.
+	 * @param content 본문
+	 * @return 요약글
+	 */
+	private String extractSummary(String content) {
+		if (!StringUtils.hasText(content)) {
+			return "";
+		}
+
+		Document document = Jsoup.parse(content);
+		document.select("script").remove();
+
+		Elements elements = document.body().children();
+		StringBuilder summary = new StringBuilder();
+		for (int i = 0; i < 3 && i < elements.size(); i++) {
+			summary.append(elements.get(i).outerHtml());
+		}
+
+		return summary.toString().trim();
 	}
 
 }
