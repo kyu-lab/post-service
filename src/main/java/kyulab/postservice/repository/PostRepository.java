@@ -25,30 +25,30 @@ public interface PostRepository extends JpaRepository<Post, Long> {
 	@Query("""
 		select
 		new kyulab.postservice.dto.res.PostListItemDto(
-			p.id, p.userId, p.subject, p.summary, count(v), count(c), p.createdAt
+			p.id, p.userId, p.subject, p.summary, p.createdAt,
+			coalesce((select count(pv) from PostView pv where pv.post.id = p.id), 0),
+			coalesce((select count(c) from Comments c where c.post.id = p.id), 0)
 		)
 		from Post p
-		left join p.comments c
-		left join p.postViews v
 		where (:cursor IS NULL OR p.id < :cursor)
 		and p.status <> 'DELETE'
-		group by p.id
 		order by p.createdAt desc
 	""")
 	List<PostListItemDto> findNewPostByCurosr(@Param("cursor") Long cursor, Pageable pageable);
 
 	@Query("""
         select new kyulab.postservice.dto.res.PostListItemDto(
-            p.id, p.userId, p.subject, p.summary, count(v), count(c), p.createdAt
+            p.id, p.userId, p.subject, p.summary, p.createdAt,
+            coalesce((select count(pv) from PostView pv where pv.post.id = p.id), 0),
+            coalesce((select count(c) from Comments c where c.post.id = p.id), 0)
         )
         from Post p
         left join p.postViews v
         left join p.comments c
-        where p.status <> 'DELETED'
-        and (select count(v2) from PostView v2 where v2.post.id = p.id) <
-        	(select count(v3) from PostView v3 where v3.post.id = :cursor)
-        group by p.id
-        order by count(v) desc
+        where (:cursor IS NULL OR p.id < :cursor)
+        and p.status <> 'DELETE'
+        group by p.id, p.userId, p.subject
+        order by coalesce(count(distinct v.id.userId), 0) desc, p.createdAt desc
     """)
 	List<PostListItemDto> findMostViewPostsByCurosr(@Param("cursor") Long cursor, Pageable pageable);
 

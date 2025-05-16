@@ -53,33 +53,32 @@ public class PostService {
 	 * 요청한 위치에 정렬 기준에 맞춰 게시글을 반환한다.
 	 * @param cursor	현재 커서 위치
 	 * @param limit		가져올 게시글 수
-	 * @param contentOrder	정렬 기준
+	 * @param order		정렬 기준
 	 * @return 게시글 엔티티
 	 */
-	@Transactional(readOnly = true)
-	public List<PostListItemDto> getPostsByOrder(Long cursor, ContentOrder contentOrder, int limit) {
+	private List<PostListItemDto> getPostsByOrder(Long cursor, ContentOrder order, int limit) {
 		PageRequest pageable = PageRequest.of(0, limit + 1);
-		if (contentOrder == ContentOrder.N) {
+		if (order == ContentOrder.N) {
 			return postRepository.findNewPostByCurosr(cursor, pageable);
-		} else if (contentOrder == ContentOrder.V) {
+		} else if (order == ContentOrder.V) {
 			return postRepository.findMostViewPostsByCurosr(cursor, pageable);
 		} else {
-			throw new BadRequestException("Invalid order type: " + contentOrder);
+			throw new BadRequestException("Invalid order type: " + order);
 		}
 	}
 
 	/**
 	 * 게시글 목록을 가져온다.
 	 * @param cursor    현재 커서 위치 (첫 요청시 null)
-	 * @param contentOrder 정렬 기준
+	 * @param order		정렬 기준
 	 * @return 게시글 목록
 	 */
 	@Transactional(readOnly = true)
-	public PostListDto getPosts(Long cursor, ContentOrder contentOrder) {
+	public PostListDto getPosts(Long cursor, ContentOrder order) {
 		int limit = 10;
 
 		// 1. 게시글 목록을 가져온다.
-		List<PostListItemDto> postListItemDtos = getPostsByOrder(cursor, contentOrder, limit);
+		List<PostListItemDto> postListItemDtos = getPostsByOrder(cursor, order, limit);
 
 		// 2. 게시글 목록에서 사용자 아이디를 추출한다.
 		Set<Long> userIds = postListItemDtos.stream()
@@ -128,7 +127,7 @@ public class PostService {
 		if (UserContext.isLogin()) {
 			long userId = UserContext.getUserId();
 			PostViewId postViewId = PostViewId.of(postId, userId);
-			if (!postViewRepository.existsById(postViewId)) {
+			if (post.getUserId() != userId && !postViewRepository.existsById(postViewId)) {
 				PostView postView = new PostView(postViewId);
 				post.addPostView(postView);
 				postViewRepository.save(postView);

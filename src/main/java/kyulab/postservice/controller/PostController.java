@@ -20,8 +20,8 @@ public class PostController {
 	@GetMapping
 	public ResponseEntity<PostListDto> getPosts(
 			@RequestParam(required = false) Long cursor,
-			@RequestParam(required = false, defaultValue = "N") ContentOrder contentOrder) {
-		return ResponseEntity.ok(postService.getPosts(cursor, contentOrder));
+			@RequestParam(required = false, defaultValue = "N") ContentOrder order) {
+		return ResponseEntity.ok(postService.getPosts(cursor, order));
 	}
 
 	@GetMapping("/{postId}")
