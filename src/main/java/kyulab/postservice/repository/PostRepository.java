@@ -1,5 +1,6 @@
 package kyulab.postservice.repository;
 
+import kyulab.postservice.dto.res.PostInfoDto;
 import kyulab.postservice.dto.res.PostListItemDto;
 import kyulab.postservice.entity.Post;
 import org.springframework.data.domain.Pageable;
@@ -23,10 +24,24 @@ public interface PostRepository extends JpaRepository<Post, Long> {
 	Optional<Post> findActivePostById(@Param("postId") long postId);
 
 	@Query("""
-		select
-		new kyulab.postservice.dto.res.PostListItemDto(
+		select new kyulab.postservice.dto.res.PostInfoDto(
+			p.id, p.userId, p.subject, p.content, p.createdAt,
+			coalesce((select count(pv) from PostView pv where pv.post.id = p.id), 0),
+			coalesce((select pv.isLike from PostView pv where pv.post.id = p.id and pv.id.userId = :userId), false),
+			coalesce((select count(pv) from PostView pv where pv.post.id = p.id and pv.isLike = true), 0),
+			coalesce((select count(c) from Comments c where c.post.id = p.id), 0)
+		)
+		from Post p
+		where p.id = :postId
+		and p.status <> 'DELETE'
+	""")
+	Optional<PostInfoDto> findActivePostInfoById(@Param("postId") long postId, @Param("userId") Long userId);
+
+	@Query("""
+		select new kyulab.postservice.dto.res.PostListItemDto(
 			p.id, p.userId, p.subject, p.summary, p.createdAt,
 			coalesce((select count(pv) from PostView pv where pv.post.id = p.id), 0),
+			coalesce((select count(pv) from PostView pv where pv.post.id = p.id and pv.isLike = true), 0),
 			coalesce((select count(c) from Comments c where c.post.id = p.id), 0)
 		)
 		from Post p
@@ -40,6 +55,7 @@ public interface PostRepository extends JpaRepository<Post, Long> {
         select new kyulab.postservice.dto.res.PostListItemDto(
             p.id, p.userId, p.subject, p.summary, p.createdAt,
             coalesce((select count(pv) from PostView pv where pv.post.id = p.id), 0),
+            coalesce((select count(pv) from PostView pv where pv.post.id = p.id and pv.isLike = true), 0),
             coalesce((select count(c) from Comments c where c.post.id = p.id), 0)
         )
         from Post p

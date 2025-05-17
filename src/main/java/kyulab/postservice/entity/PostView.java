@@ -28,12 +28,19 @@ public class PostView {
 	@Column(updatable = false)
 	private LocalDateTime viewAt;
 
+	@Column(nullable = false, columnDefinition = "BOOLEAN DEFAULT FALSE")
+	private boolean isLike = false;
+
 	public PostView(PostViewId id) {
 		this.id = id;
 	}
 
 	public void setPost(Post post) {
 		this.post = post;
+	}
+
+	public void toggleLike() {
+		this.isLike = !this.isLike;
 	}
 
 }

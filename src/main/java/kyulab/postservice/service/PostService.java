@@ -8,16 +8,14 @@ import kyulab.postservice.dto.kafka.file.PostImgKafkaDto;
 import kyulab.postservice.dto.kafka.file.PostImgListKafkaDto;
 import kyulab.postservice.dto.kafka.notices.PostNoticesKafkaDto;
 import kyulab.postservice.dto.kafka.search.PostSearchKafkaDto;
-import kyulab.postservice.dto.req.PostCreateDto;
-import kyulab.postservice.dto.req.PostContentDto;
-import kyulab.postservice.dto.req.PostSettingsDto;
-import kyulab.postservice.dto.req.PostUpdateDto;
+import kyulab.postservice.dto.req.*;
 import kyulab.postservice.dto.res.*;
 import kyulab.postservice.entity.Groups;
 import kyulab.postservice.entity.Post;
 import kyulab.postservice.entity.PostView;
 import kyulab.postservice.entity.key.PostViewId;
 import kyulab.postservice.handler.exception.BadRequestException;
+import kyulab.postservice.handler.exception.ForbiddenException;
 import kyulab.postservice.handler.exception.NotFoundException;
 import kyulab.postservice.handler.exception.UnauthorizedAccessException;
 import kyulab.postservice.repository.PostRepository;
@@ -120,22 +118,46 @@ public class PostService {
 
 	@Transactional
 	public PostDto getPost(long postId) {
-		Post post = getActivePost(postId);
-		UsersDto usersInfo = usersGatewayService.requestUserInfo(post.getUserId());
+		PostInfoDto postInfoDto = postRepository.findActivePostInfoById(postId, UserContext.getUserId())
+				.orElseThrow(() -> {
+					log.info("Post {} Not Found", postId);
+					return new NotFoundException("Post Not Found");
+				});
+		increaseView(postId, postInfoDto.userId());
 
-		// 사용자일 경우 토큰으로 조회수를 올린다.
-		if (UserContext.isLogin()) {
-			long userId = UserContext.getUserId();
-			PostViewId postViewId = PostViewId.of(postId, userId);
-			if (post.getUserId() != userId && !postViewRepository.existsById(postViewId)) {
-				PostView postView = new PostView(postViewId);
-				post.addPostView(postView);
-				postViewRepository.save(postView);
-			}
+		// 작성자 정보 조회
+		UsersDto usersInfo = usersGatewayService.requestUserInfo(postInfoDto.userId());
+		return new PostDto(usersInfo, postInfoDto);
+	}
+
+	/**
+	 * 게시글의 조회수를 높인다.
+	 * 1. 로그인한 사용자
+	 * 2. 다른 사람의 작성글 (자기 자신의 글은 조회수 X)
+	 * 3. 조회한적 없는 사용자.
+	 * @param postId   게시글 아이디
+	 * @param writerId 게시글 작성자 아이디
+	 */
+	@Transactional
+	public void increaseView(long postId, long writerId) {
+		if (!UserContext.isLogin()) {
+			return;
 		}
 
-		long viewCount = postViewRepository.countByIdPostId(postId);
-		return new PostDto(usersInfo, PostInfoDto.from(post, viewCount));
+		long userId = UserContext.getUserId();
+		if (writerId == userId) {
+			return;
+		}
+
+		PostViewId postViewId = PostViewId.of(postId, userId);
+		if (postViewRepository.existsById(postViewId)) {
+			return;
+		}
+
+		Post postProxy = postRepository.getReferenceById(postId);
+		PostView postView = new PostView(postViewId);
+		postProxy.addPostView(postView);
+		postViewRepository.save(postView);
 	}
 
 	/**
@@ -258,6 +280,29 @@ public class PostService {
 			PostImgKafkaDto postImgKafkaDto = new PostImgKafkaDto(post.getId(), updateDto.settingsDto().thumbnailUrl());
 			kafkaService.sendMsg("post-thumbnail", postImgKafkaDto);
 		}
+	}
+
+	@Transactional
+	public boolean toggleLike(long postId) {
+		if (!postRepository.existsById(postId)) {
+			log.info("Post {} Not Found", postId);
+			throw new NotFoundException("Post Not Found");
+		}
+
+		if (!UserContext.isLogin()) {
+			throw new ForbiddenException("로그인 후 사용 가능합니다.");
+		}
+
+		long userId = UserContext.getUserId();
+		PostViewId postViewId = PostViewId.of(postId, userId);
+		PostView postView = postViewRepository.findById(postViewId)
+				.orElseThrow(() -> {
+						log.info("PostView {} Not Found", postViewId);
+						return new NotFoundException("PostViewId Found");
+				});
+
+		postView.toggleLike();
+		return postView.isLike();
 	}
 
 	@Transactional

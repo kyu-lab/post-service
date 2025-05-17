@@ -12,14 +12,15 @@ import java.time.LocalDateTime;
  * @param viewCount		조회수
  * @param commentCount	댓글 수
  */
-public record PostListItemDto(long id, long userId, String subject, String summary, LocalDateTime createdAt, long viewCount, long commentCount) {
-	public PostListItemDto(long id, long userId, String subject, String summary, LocalDateTime createdAt, long viewCount, long commentCount) {
+public record PostListItemDto(long id, long userId, String subject, String summary, LocalDateTime createdAt, long viewCount, long likeCount, long commentCount) {
+	public PostListItemDto(long id, long userId, String subject, String summary, LocalDateTime createdAt, long viewCount, long likeCount, long commentCount) {
 		this.id = id;
 		this.userId = userId;
 		this.subject = subject;
 		this.summary = summary;
 		this.createdAt = createdAt;
 		this.viewCount = viewCount;
+		this.likeCount = likeCount;
 		this.commentCount = commentCount;
 	}
 }
