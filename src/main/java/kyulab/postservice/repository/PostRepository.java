@@ -68,4 +68,6 @@ public interface PostRepository extends JpaRepository<Post, Long> {
     """)
 	List<PostListItemDto> findMostViewPostsByCurosr(@Param("cursor") Long cursor, Pageable pageable);
 
+	long countPostByUserId(long userId);
+
 }
