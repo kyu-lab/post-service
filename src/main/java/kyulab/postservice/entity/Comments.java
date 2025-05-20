@@ -7,6 +7,9 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
+import java.util.ArrayList;
+import java.util.List;
+
 @Entity
 @Getter
 @EntityListeners(AuditingEntityListener.class)
@@ -22,6 +25,15 @@ public class Comments extends ContentEntity {
 	@ManyToOne(fetch = FetchType.LAZY)
 	@JoinColumn(name = "parent_id")
 	private Comments parent;
+
+	@ManyToOne(fetch = FetchType.LAZY)
+	private Comments root;
+
+	@OneToMany(
+			mappedBy = "comment",
+			fetch = FetchType.LAZY
+	)
+	private List<CommentVote> commentVotes = new ArrayList<>();
 
 	private Comments(long userId, String content, ContentStatus status) {
 		super(userId, content, status);
@@ -49,6 +61,12 @@ public class Comments extends ContentEntity {
 
 	public void setParent(Comments parent) {
 		this.parent = parent;
+		this.root = (parent.getRoot() == null) ? parent : parent.getRoot();
+	}
+
+	public void updateCommentVote(CommentVote commentVote) {
+		this.commentVotes.add(commentVote);
+		commentVote.setComment(this);
 	}
 
 }

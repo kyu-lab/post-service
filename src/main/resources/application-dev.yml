@@ -23,6 +23,8 @@ spring:
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+  jooq:
+    sql-dialect: postgres
 eureka:
   client:
     enabled: true
@@ -52,6 +54,7 @@ logging:
     org.springframework.data.jpa: DEBUG
     org.hibernate.type.descriptor.sql.BasicBinder: TRACE
     org.hibernate.type.descriptor.sql.BasicExtractor: DEBUG
+    org.jooq: DEBUG
 jwt:
   access-token: SGVsbG9AI2UzV3JvbGQhQCN9RHxkc2prZC0oOTBNeVNlY3JldCEyMyRGREcjMw==
 gateway:
