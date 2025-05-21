@@ -43,6 +43,12 @@ public class Post extends ContentEntity {
 	)
 	private List<PostView> postViews = new ArrayList<>();
 
+	@OneToMany(
+		mappedBy = "post",
+		fetch = FetchType.LAZY
+	)
+	private List<PostMark> postMarks = new ArrayList<>();
+
 	private boolean isThumbnail;
 
 	private String thumbnailUrl;
@@ -100,6 +106,12 @@ public class Post extends ContentEntity {
 		Objects.requireNonNull(comments);
 		this.comments.add(comments);
 		comments.setPost(this);
+	}
+
+	public void addPostMark(PostMark postMark) {
+		Objects.requireNonNull(postMark);
+		this.postMarks.add(postMark);
+		postMark.setPost(this);
 	}
 
 	public void setGroups(Groups groups) {

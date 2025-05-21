@@ -29,6 +29,20 @@ public class PostController {
 		return ResponseEntity.ok(postService.getPost(postId));
 	}
 
+	@GetMapping("/user/{userId}")
+	public ResponseEntity<PostListDto> getUserPosts(
+			@PathVariable long userId,
+			@RequestParam(required = false) Long cursor) {
+		return ResponseEntity.ok(postService.getUserPosts(userId, cursor));
+	}
+
+	@GetMapping("/user/{userId}/postMark")
+	public ResponseEntity<PostListDto> getUserkMarkPost(
+			@PathVariable long userId,
+			@RequestParam(required = false) Long cursor) {
+		return ResponseEntity.ok(postService.getUserkMarkPost(userId, cursor));
+	}
+
 	@PostMapping
 	public ResponseEntity<String> savePost(@RequestBody PostCreateDto createDto) {
 		return ResponseEntity.created(postService.savePost(createDto)).build();
@@ -43,6 +57,11 @@ public class PostController {
 	@PutMapping("/{postId}/like")
 	public ResponseEntity<Boolean> toggleLike(@PathVariable long postId) {
 		return ResponseEntity.ok(postService.toggleLike(postId));
+	}
+
+	@PutMapping("/{postId}/postMark")
+	public ResponseEntity<Boolean> togglePostMark(@PathVariable long postId) {
+		return ResponseEntity.ok(postService.togglePostMark(postId));
 	}
 
 	@DeleteMapping("/{postId}")

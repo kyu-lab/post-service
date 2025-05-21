@@ -68,6 +68,41 @@ public interface PostRepository extends JpaRepository<Post, Long> {
     """)
 	List<PostListItemDto> findMostViewPostsByCurosr(@Param("cursor") Long cursor, Pageable pageable);
 
+	@Query("""
+        select new kyulab.postservice.dto.res.PostListItemDto(
+            p.id, p.userId, p.subject, p.summary, p.createdAt,
+            coalesce((select count(pv) from PostView pv where pv.post.id = p.id), 0),
+            coalesce((select count(pv) from PostView pv where pv.post.id = p.id and pv.isLike = true), 0),
+            coalesce((select count(c) from Comments c where c.post.id = p.id), 0)
+        )
+        from Post p
+        left join p.postViews v
+        left join p.comments c
+        where (:cursor IS NULL OR p.id < :cursor)
+        and p.userId = :userId
+        group by p.id, p.userId, p.subject
+        order by coalesce(count(distinct v.id.userId), 0) desc, p.createdAt desc
+    """)
+	List<PostListItemDto> findUserPostByCursor(@Param("userId") long userId, @Param("cursor") Long cursor, Pageable pageable);
+
 	long countPostByUserId(long userId);
+
+	@Query("""
+        select new kyulab.postservice.dto.res.PostListItemDto(
+            p.id, p.userId, p.subject, p.summary, p.createdAt,
+            coalesce((select count(pv) from PostView pv where pv.post.id = p.id), 0),
+            coalesce((select count(pv) from PostView pv where pv.post.id = p.id and pv.isLike = true), 0),
+            coalesce((select count(c) from Comments c where c.post.id = p.id), 0)
+        )
+        from Post p
+        left join p.postViews v
+        left join p.comments c
+        left join p.postMarks m
+        where (:cursor IS NULL OR p.id < :cursor)
+        and m.id.userId = :userId
+        group by p.id, p.userId, p.subject
+        order by coalesce(count(distinct v.id.userId), 0) desc, p.createdAt desc
+    """)
+	List<PostListItemDto> findUserMarkPostByCursor(@Param("userId") long userId, @Param("cursor") Long cursor, Pageable pageable);
 
 }
