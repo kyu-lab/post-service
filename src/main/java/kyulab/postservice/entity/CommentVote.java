@@ -1,42 +1,39 @@
 package kyulab.postservice.entity;
 
 import jakarta.persistence.*;
-import kyulab.postservice.entity.key.PostViewId;
+import kyulab.postservice.entity.key.CommentVoteId;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
-import java.time.LocalDateTime;
+import java.util.Objects;
 
 @Entity
 @Getter
 @EntityListeners(AuditingEntityListener.class)
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class PostView {
+public class CommentVote {
 
 	@EmbeddedId
-	private PostViewId id;
+	private CommentVoteId id;
 
 	@ManyToOne(fetch = FetchType.LAZY)
-	@MapsId("postId")
-	@JoinColumn(name = "post_id")
-	private Post post;
-
-	@CreatedDate
-	@Column(updatable = false)
-	private LocalDateTime viewAt;
+	@MapsId("commentId")
+	@JoinColumn(name = "comment_id")
+	private Comments comment;
 
 	@Column(nullable = false, columnDefinition = "BOOLEAN DEFAULT FALSE")
 	private boolean isLike = false;
 
-	public PostView(PostViewId id) {
-		this.id = id;
+	public CommentVote(CommentVoteId commentVoteId) {
+		Objects.requireNonNull(commentVoteId);
+		this.id = commentVoteId;
+		this.isLike = true;
 	}
 
-	public void setPost(Post post) {
-		this.post = post;
+	public void setComment(Comments comment) {
+		this.comment = comment;
 	}
 
 	public void toggleLike() {

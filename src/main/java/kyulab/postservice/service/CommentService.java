@@ -5,15 +5,20 @@ import kyulab.postservice.dto.gateway.res.UsersListDto;
 import kyulab.postservice.dto.gateway.res.UsersDto;
 import kyulab.postservice.dto.req.CommentCreateDto;
 import kyulab.postservice.dto.req.CommentUpdateDto;
+import kyulab.postservice.dto.res.CommentInfoDto;
 import kyulab.postservice.dto.res.CommentItemDto;
 import kyulab.postservice.dto.res.CommentListDto;
-import kyulab.postservice.vo.CommentItemVO;
+import kyulab.postservice.entity.CommentVote;
+import kyulab.postservice.entity.key.CommentVoteId;
+import kyulab.postservice.handler.exception.ForbiddenException;
+import kyulab.postservice.repository.CommentVoteRepository;
 import kyulab.postservice.entity.Comments;
 import kyulab.postservice.entity.Post;
 import kyulab.postservice.handler.exception.BadRequestException;
 import kyulab.postservice.handler.exception.NotFoundException;
 import kyulab.postservice.repository.CommentRepository;
 import kyulab.postservice.service.gateway.UsersGatewayService;
+import kyulab.postservice.service.jooq.CommentJooqService;
 import kyulab.postservice.utils.UserContext;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -31,47 +36,32 @@ public class CommentService {
 
 	private final PostService postService;
 	private final GroupService groupService;
+	private final CommentJooqService commentJooqService;
 	private final UsersGatewayService usersGatewayService;
 	private final CommentRepository commentRepository;
+	private final CommentVoteRepository commentVoteRepository;
 
 	@Transactional(readOnly = true)
-	public List<CommentItemVO> getCommentsByOrder(long postId, Long cursor, ContentOrder contentOrder, int limit) {
-		// 한 번에 가져올 댓글을 10개로 고정
-		PageRequest pageable = PageRequest.of(0, limit + 1);
-		if (contentOrder == ContentOrder.N) {
-			return commentRepository.findNewCommentsByCurosr(postId, cursor, pageable);
-		} else if (contentOrder == ContentOrder.V) {
-			return commentRepository.findMostViewCommentsByCurosr(postId, cursor, pageable);
-		} else {
-			throw new BadRequestException("Invalid order type: " + contentOrder);
-		}
-	}
-
-	@Transactional(readOnly = true)
-	public CommentListDto getComments(long postId, Long cursor, ContentOrder contentOrder) {
-		int limit = 10;
-
+	public CommentListDto getComments(long postId, Long cursor, ContentOrder order) {
 		// 1. 댓글을 가져온다.
-		List<CommentItemVO> commentItemVO = getCommentsByOrder(postId, cursor, contentOrder, limit);
+		List<CommentInfoDto> commentInfoDtos = commentJooqService.getCommentsByOrder(postId, cursor, order, 10);
 
-		// 2. 대댓글을 조회와 사용자 아이디를 추출한다.
+		// 2. 대댓글과 사용자 아이디를 추출한다.
 		Set<Long> userIds = new HashSet<>();
-		for (CommentItemVO itemDto : commentItemVO) {
-			userIds.add(itemDto.getUserId());
-			long childCount = commentRepository.countCommentsByParentId(itemDto.getId());
-			if (childCount == 0) {
+		Map<Long, List<CommentInfoDto>> childs = new HashMap<>();
+		for (CommentInfoDto commentInfoDto : commentInfoDtos) {
+			userIds.add(commentInfoDto.userId());
+			if (commentInfoDto.childCount() == 0) {
 				continue;
 			}
-			List<CommentItemVO> childs = commentRepository.findChildComments(
-					postId, itemDto.getId(), null, PageRequest.of(0, 2)
-			);
-			itemDto.setChildCount(childCount);
-			itemDto.setChild(childs);
 
-			for (CommentItemVO child : childs) {
-				long childReplyCount = commentRepository.countCommentsByParentId(child.getId());
-				userIds.add(child.getUserId());
-				child.setChildCount(childReplyCount);
+			List<CommentInfoDto> childList = commentRepository.findChildComments(
+					postId, commentInfoDto.id(), null, PageRequest.of(0, 3), UserContext.getUserId()
+			);
+			childs.put(commentInfoDto.id(), childList);
+
+			for (CommentInfoDto child : childList) {
+				userIds.add(child.userId());
 			}
 		}
 
@@ -79,18 +69,18 @@ public class CommentService {
 		UsersListDto usersListDto = usersGatewayService.requestUserInfos(userIds);
 
 		// 4. 사용자 정보와 댓글을 합친다.
-		List<CommentItemDto> commentList = commentItemVO.stream().map(comment -> {
+		List<CommentItemDto> commentList = commentInfoDtos.stream().map(comment -> {
 			UsersDto userInfo = usersListDto.userList().stream()
-					.filter(u -> Objects.equals(u.id(), comment.getUserId()))
+					.filter(u -> Objects.equals(u.id(), comment.userId()))
 					.findFirst()
 					.orElse(UsersDto.deleteUser());
 
 			// 대댓글이 있는 댓글이라면
-			List<CommentItemDto> childCommentList = null;
-			if (comment.getChildCount() > 0) {
-				childCommentList = comment.getChild().stream().map(child -> {
+			List<CommentItemDto> childCommentList = new ArrayList<>();
+			if (childs.containsKey(comment.id())) {
+				childCommentList = childs.get(comment.id()).stream().map(child -> {
 					UsersDto childUserInfo = usersListDto.userList().stream()
-							.filter(u -> Objects.equals(u.id(), comment.getUserId()))
+							.filter(u -> Objects.equals(u.id(), comment.userId()))
 							.findFirst()
 							.orElse(UsersDto.deleteUser());
 					return CommentItemDto.from(childUserInfo, child, null);
@@ -100,9 +90,8 @@ public class CommentService {
 		}).toList();
 
 		// 6. 다음 댓글이 있는지 확인한다.
-		boolean hasMore = commentItemVO.size() > limit;
-		Long nextCursor = commentItemVO.isEmpty() ? null : commentItemVO.get(commentItemVO.size() - 1).getId();
-
+		boolean hasMore = commentInfoDtos.size() > 10;
+		Long nextCursor = commentInfoDtos.isEmpty() ? null : commentInfoDtos.get(commentInfoDtos.size() - 1).id();
 		return new CommentListDto(commentList, nextCursor, hasMore);
 	}
 
@@ -112,28 +101,28 @@ public class CommentService {
 		PageRequest pageable = PageRequest.of(0, limit + 1);
 
 		// 1. 대댓글을 가져온다.
-		List<CommentItemVO> commentItemVOS = commentRepository.findChildComments(postId, parentId, cursor, pageable);
+		List<CommentInfoDto> commentDtos = commentRepository.findChildComments(postId, parentId, cursor, pageable, UserContext.getUserId());
 
 		// 2. 댓글에서 사용자 아이디를 추출한다.
-		Set<Long> userIds = commentItemVOS.stream()
-				.map(CommentItemVO::getUserId)
+		Set<Long> userIds = commentDtos.stream()
+				.map(CommentInfoDto::userId)
 				.collect(Collectors.toSet());
 
 		// 3. 사용자 서비스에게 사용자 아이디 정보를 가져온다.
 		UsersListDto usersListDto = usersGatewayService.requestUserInfos(userIds);
 
 		// 4. 사용자 정보와 댓글을 합친다.
-		List<CommentItemDto> commentList = commentItemVOS.stream().map(comment -> {
+		List<CommentItemDto> commentList = commentDtos.stream().map(comment -> {
 			UsersDto userInfo = usersListDto.userList().stream()
-					.filter(u -> Objects.equals(u.id(), comment.getUserId()))
+					.filter(u -> Objects.equals(u.id(), comment.userId()))
 					.findFirst()
 					.orElse(UsersDto.deleteUser());
 			return CommentItemDto.from(userInfo, comment, null);
 		}).toList();
 
 		// 5. 다음 댓글이 있는지 확인한다.
-		boolean hasMore = commentItemVOS.size() > limit;
-		Long nextCursor = commentItemVOS.isEmpty() ? null : commentItemVOS.get(commentItemVOS.size() - 1).getId();
+		boolean hasMore = commentDtos.size() > limit;
+		Long nextCursor = commentDtos.isEmpty() ? null : commentDtos.get(commentDtos.size() - 1).id();
 
 		return new CommentListDto(commentList, nextCursor, hasMore);
 	}
@@ -168,6 +157,36 @@ public class CommentService {
 				});
 
 		comments.updateContent(updateDto.content());
+	}
+
+	@Transactional
+	public boolean toggleLike(long commentId) {
+		if (!commentRepository.existsById(commentId)) {
+			log.info("Comment {} Not Found", commentId);
+			throw new NotFoundException("Comment Not Found");
+		}
+
+		if (!UserContext.isLogin()) {
+			throw new ForbiddenException("로그인 후 사용 가능합니다.");
+		}
+
+		CommentVoteId commentVoteId = CommentVoteId.of(commentId, UserContext.getUserId());
+		CommentVote commentVote;
+		if (commentVoteRepository.existsById(commentVoteId)) {
+			commentVote = commentVoteRepository.findById(commentVoteId)
+					.orElseThrow(() -> {
+						log.info("CommentVote {} Not Found", commentVoteId);
+						return new NotFoundException("commentVoteId Found");
+					});
+			commentVote.toggleLike();
+		} else {
+			Comments commentProxy = commentRepository.getReferenceById(commentId);
+			commentVote = new CommentVote(commentVoteId);
+			commentProxy.updateCommentVote(commentVote);
+			commentVoteRepository.save(commentVote);
+		}
+
+		return commentVote.isLike();
 	}
 
 }

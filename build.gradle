@@ -2,6 +2,7 @@ plugins {
     id 'java'
     id 'org.springframework.boot' version '3.4.3'
     id 'io.spring.dependency-management' version '1.1.7'
+    id 'nu.studer.jooq' version '8.2'
 }
 
 archivesBaseName = 'post-service'
@@ -32,12 +33,13 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
     implementation 'org.springframework.cloud:spring-cloud-starter-config'
     implementation 'org.springframework.cloud:spring-cloud-starter-netflix-eureka-client'
-    implementation 'org.postgresql:postgresql'
+    implementation 'org.postgresql:postgresql:42.7.2'
     implementation 'io.jsonwebtoken:jjwt-api:0.11.5'
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
     implementation 'org.springframework.kafka:spring-kafka'
     implementation 'org.springframework.boot:spring-boot-starter-validation'
     implementation 'org.jsoup:jsoup:1.17.2' // 게시글 본문 파싱을 위해
+    implementation 'org.springframework.boot:spring-boot-starter-jooq'
     compileOnly 'org.projectlombok:lombok'
     runtimeOnly 'com.h2database:h2'
     runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.11.5'
@@ -45,11 +47,95 @@ dependencies {
     annotationProcessor 'org.projectlombok:lombok'
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+
+    // jooq
+    jooqGenerator 'org.jooq:jooq:3.19.13'
+    jooqGenerator 'org.postgresql:postgresql:42.7.2'
+    jooqGenerator 'com.h2database:h2'
 }
 
 dependencyManagement {
     imports {
         mavenBom "org.springframework.cloud:spring-cloud-dependencies:${springCloudVersion}"
+    }
+}
+
+sourceSets {
+    main {
+        java {
+            srcDir "${buildDir}/generated/sources/jooq"
+        }
+    }
+}
+
+jooq {
+    version = '3.19.13'
+    configurations {
+        dev {
+            generationTool {
+                jdbc {
+                    driver = 'org.postgresql.Driver'
+                    url = 'jdbc:postgresql://localhost:5432/post-service'
+                    user = 'postgres'
+                    password = 1234
+                }
+                generator {
+                    database {
+                        name = 'org.jooq.meta.postgres.PostgresDatabase'
+                        includes = '.*'
+                        excludes = ''
+                        inputSchema = 'public'
+                    }
+                    target {
+                        packageName = 'kyulab.jooq'
+                        directory = "${buildDir}/generated/sources/jooq"
+                    }
+                }
+            }
+        }
+        prod {
+            generationTool {
+                jdbc {
+                    driver = 'org.postgresql.Driver'
+                    url = 'jdbc:postgresql://localhost:5432/post-service'
+                    user = 'postgres'
+                    password = System.getenv('DB_PWD') ?: ''
+                }
+                generator {
+                    database {
+                        name = 'org.jooq.meta.postgres.PostgresDatabase'
+                        includes = '.*'
+                        excludes = ''
+                        inputSchema = 'public'
+                    }
+                    target {
+                        packageName = 'kyulab.jooq'
+                        directory = "${buildDir}/generated/sources/jooq"
+                    }
+                }
+            }
+        }
+        test {
+            generationTool {
+                jdbc {
+                    url = 'jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1'
+                    driver = 'org.h2.Driver'
+                    user = 'sa'
+                }
+                generator {
+                    database {
+                        name = 'org.jooq.meta.h2.H2Database'
+                        includes = '.*'
+                        excludes = ''
+                        inputSchema = 'PUBLIC'
+                    }
+                    target {
+                        packageName = 'kyulab.jooq.test'
+                        directory = "${buildDir}/generated/sources/jooq-test"
+                    }
+                }
+            }
+        }
     }
 }
 

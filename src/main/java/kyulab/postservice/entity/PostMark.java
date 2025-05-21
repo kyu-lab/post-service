@@ -1,7 +1,7 @@
 package kyulab.postservice.entity;
 
 import jakarta.persistence.*;
-import kyulab.postservice.entity.key.PostViewId;
+import kyulab.postservice.entity.key.PostMarkId;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -14,10 +14,10 @@ import java.time.LocalDateTime;
 @Getter
 @EntityListeners(AuditingEntityListener.class)
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class PostView {
+public class PostMark {
 
 	@EmbeddedId
-	private PostViewId id;
+	private PostMarkId id;
 
 	@ManyToOne(fetch = FetchType.LAZY)
 	@MapsId("postId")
@@ -26,21 +26,14 @@ public class PostView {
 
 	@CreatedDate
 	@Column(updatable = false)
-	private LocalDateTime viewAt;
+	private LocalDateTime markAt;
 
-	@Column(nullable = false, columnDefinition = "BOOLEAN DEFAULT FALSE")
-	private boolean isLike = false;
-
-	public PostView(PostViewId id) {
+	public PostMark(PostMarkId id) {
 		this.id = id;
 	}
 
 	public void setPost(Post post) {
 		this.post = post;
-	}
-
-	public void toggleLike() {
-		this.isLike = !this.isLike;
 	}
 
 }

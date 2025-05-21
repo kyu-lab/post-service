@@ -5,7 +5,7 @@ import kyulab.postservice.domain.group.GroupUsersStatus;
 import kyulab.postservice.dto.kafka.search.GroupKafkaDto;
 import kyulab.postservice.dto.req.GroupCreateDto;
 import kyulab.postservice.dto.req.GroupUpdateDto;
-import kyulab.postservice.dto.res.GroupDto;
+import kyulab.postservice.dto.res.*;
 import kyulab.postservice.entity.Groups;
 import kyulab.postservice.entity.GroupUsers;
 import kyulab.postservice.entity.key.GroupUserId;
@@ -19,6 +19,7 @@ import kyulab.postservice.service.kafka.KafkaService;
 import kyulab.postservice.utils.UserContext;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -62,6 +63,22 @@ public class GroupService {
 			}
 		}
 		return groups;
+	}
+
+	@Transactional(readOnly = true)
+	public GroupListDto getUserGroupList(long userId, Long cursor) {
+		int limit = 10;
+
+		// 1. 게시글 목록을 가져온다.
+		List<GroupListItemDto> groupListItemDtos = groupRepository.findUserMarkPostByCursor(
+				userId, cursor, PageRequest.of(0, limit + 1)
+		);
+
+		// 2. 다음 게시글이 있는지 확인한다.
+		boolean hasMore = groupListItemDtos.size() > limit;
+		Long nextCursor = groupListItemDtos.isEmpty() ? null : groupListItemDtos.get(groupListItemDtos.size() - 1).id();
+
+		return new GroupListDto(groupListItemDtos, nextCursor, hasMore);
 	}
 
 	@Transactional(readOnly = true)

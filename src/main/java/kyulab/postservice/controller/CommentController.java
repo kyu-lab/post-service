@@ -20,8 +20,8 @@ public class CommentController {
 	public ResponseEntity<CommentListDto> getComments(
 			@RequestParam long postId,
 			@RequestParam(required = false) Long cursor,
-			@RequestParam(required = false, defaultValue = "N") ContentOrder contentOrder) {
-		return ResponseEntity.ok(commentService.getComments(postId, cursor, contentOrder));
+			@RequestParam(required = false, defaultValue = "N") ContentOrder order) {
+		return ResponseEntity.ok(commentService.getComments(postId, cursor, order));
 	}
 
 	@GetMapping("/child")
@@ -44,4 +44,8 @@ public class CommentController {
 		return ResponseEntity.ok().build();
 	}
 
+	@PutMapping("/{commentId}/like")
+	public ResponseEntity<Boolean> toggleLike(@PathVariable long commentId) {
+		return ResponseEntity.ok(commentService.toggleLike(commentId));
+	}
 }

@@ -8,18 +8,19 @@ import kyulab.postservice.dto.kafka.file.PostImgKafkaDto;
 import kyulab.postservice.dto.kafka.file.PostImgListKafkaDto;
 import kyulab.postservice.dto.kafka.notices.PostNoticesKafkaDto;
 import kyulab.postservice.dto.kafka.search.PostSearchKafkaDto;
-import kyulab.postservice.dto.req.PostCreateDto;
-import kyulab.postservice.dto.req.PostContentDto;
-import kyulab.postservice.dto.req.PostSettingsDto;
-import kyulab.postservice.dto.req.PostUpdateDto;
+import kyulab.postservice.dto.req.*;
 import kyulab.postservice.dto.res.*;
 import kyulab.postservice.entity.Groups;
 import kyulab.postservice.entity.Post;
+import kyulab.postservice.entity.PostMark;
 import kyulab.postservice.entity.PostView;
+import kyulab.postservice.entity.key.PostMarkId;
 import kyulab.postservice.entity.key.PostViewId;
 import kyulab.postservice.handler.exception.BadRequestException;
+import kyulab.postservice.handler.exception.ForbiddenException;
 import kyulab.postservice.handler.exception.NotFoundException;
 import kyulab.postservice.handler.exception.UnauthorizedAccessException;
+import kyulab.postservice.repository.PostMarkRepository;
 import kyulab.postservice.repository.PostRepository;
 import kyulab.postservice.repository.PostViewRepository;
 import kyulab.postservice.service.gateway.UsersGatewayService;
@@ -48,6 +49,7 @@ public class PostService {
 	private final KafkaService kafkaService;
 	private final PostRepository postRepository;
 	private final PostViewRepository postViewRepository;
+	private final PostMarkRepository postMarkRepository;
 
 	/**
 	 * 요청한 위치에 정렬 기준에 맞춰 게시글을 반환한다.
@@ -105,6 +107,82 @@ public class PostService {
 	}
 
 	/**
+	 * 사용자가 작성한 게시글 목록을 최신 기준으로 가져온다.
+	 * @param cursor    현재 커서 위치 (첫 요청시 null)
+	 * @return 게시글 목록
+	 */
+	@Transactional(readOnly = true)
+	public PostListDto getUserPosts(long userId, Long cursor) {
+		int limit = 10;
+
+		// 1. 게시글 목록을 가져온다.
+		List<PostListItemDto> postListItemDtos = postRepository.findUserPostByCursor(
+				userId, cursor, PageRequest.of(0, limit + 1)
+		);
+
+		// 2. 게시글 목록에서 사용자 아이디를 추출한다.
+		Set<Long> userIds = postListItemDtos.stream()
+				.map(PostListItemDto::userId)
+				.collect(Collectors.toSet());
+
+		// 3. 사용자 서비스에게 사용자 아이디 정보를 가져온다.
+		UsersListDto usersListDto = usersGatewayService.requestUserInfos(userIds);
+
+		// 4. 사용자 정보와 게시글 정보를 합친다.
+		List<PostItemDto> postList = postListItemDtos.stream().map(item -> {
+			UsersDto writerInfo = usersListDto.userList().stream()
+					.filter(u -> Objects.equals(u.id(), item.userId()))
+					.findFirst()
+					.orElse(UsersDto.deleteUser());
+			return new PostItemDto(writerInfo, item);
+		}).toList();
+
+		// 5. 다음 게시글이 있는지 확인한다.
+		boolean hasMore = postListItemDtos.size() > limit;
+		Long nextCursor = postListItemDtos.isEmpty() ? null : postListItemDtos.get(postListItemDtos.size() - 1).id();
+
+		return new PostListDto(postList, nextCursor, hasMore);
+	}
+
+	/**
+	 * 사용자가 작성한 게시글 목록을 최신 기준으로 가져온다.
+	 * @param cursor    현재 커서 위치 (첫 요청시 null)
+	 * @return 게시글 목록
+	 */
+	@Transactional(readOnly = true)
+	public PostListDto getUserkMarkPost(long userId, Long cursor) {
+		int limit = 10;
+
+		// 1. 게시글 목록을 가져온다.
+		List<PostListItemDto> postListItemDtos = postRepository.findUserMarkPostByCursor(
+				userId, cursor, PageRequest.of(0, limit + 1)
+		);
+
+		// 2. 게시글 목록에서 사용자 아이디를 추출한다.
+		Set<Long> userIds = postListItemDtos.stream()
+				.map(PostListItemDto::userId)
+				.collect(Collectors.toSet());
+
+		// 3. 사용자 서비스에게 사용자 아이디 정보를 가져온다.
+		UsersListDto usersListDto = usersGatewayService.requestUserInfos(userIds);
+
+		// 4. 사용자 정보와 게시글 정보를 합친다.
+		List<PostItemDto> postList = postListItemDtos.stream().map(item -> {
+			UsersDto writerInfo = usersListDto.userList().stream()
+					.filter(u -> Objects.equals(u.id(), item.userId()))
+					.findFirst()
+					.orElse(UsersDto.deleteUser());
+			return new PostItemDto(writerInfo, item);
+		}).toList();
+
+		// 5. 다음 게시글이 있는지 확인한다.
+		boolean hasMore = postListItemDtos.size() > limit;
+		Long nextCursor = postListItemDtos.isEmpty() ? null : postListItemDtos.get(postListItemDtos.size() - 1).id();
+
+		return new PostListDto(postList, nextCursor, hasMore);
+	}
+
+	/**
 	 * 조회가능한 게시글 엔티티를 반환한다.
 	 * @param id 게시글 아이디
 	 * @return 삭제되지 않은 게시글
@@ -120,22 +198,46 @@ public class PostService {
 
 	@Transactional
 	public PostDto getPost(long postId) {
-		Post post = getActivePost(postId);
-		UsersDto usersInfo = usersGatewayService.requestUserInfo(post.getUserId());
+		PostInfoDto postInfoDto = postRepository.findActivePostInfoById(postId, UserContext.getUserId())
+				.orElseThrow(() -> {
+					log.info("Post {} Not Found", postId);
+					return new NotFoundException("Post Not Found");
+				});
+		increaseView(postId, postInfoDto.userId());
 
-		// 사용자일 경우 토큰으로 조회수를 올린다.
-		if (UserContext.isLogin()) {
-			long userId = UserContext.getUserId();
-			PostViewId postViewId = PostViewId.of(postId, userId);
-			if (post.getUserId() != userId && !postViewRepository.existsById(postViewId)) {
-				PostView postView = new PostView(postViewId);
-				post.addPostView(postView);
-				postViewRepository.save(postView);
-			}
+		// 작성자 정보 조회
+		UsersDto usersInfo = usersGatewayService.requestUserInfo(postInfoDto.userId());
+		return new PostDto(usersInfo, postInfoDto);
+	}
+
+	/**
+	 * 게시글의 조회수를 높인다.
+	 * 1. 로그인한 사용자
+	 * 2. 다른 사람의 작성글 (자기 자신의 글은 조회수 X)
+	 * 3. 조회한적 없는 사용자.
+	 * @param postId   게시글 아이디
+	 * @param writerId 게시글 작성자 아이디
+	 */
+	@Transactional
+	public void increaseView(long postId, long writerId) {
+		if (!UserContext.isLogin()) {
+			return;
 		}
 
-		long viewCount = postViewRepository.countByIdPostId(postId);
-		return new PostDto(usersInfo, PostInfoDto.from(post, viewCount));
+		long userId = UserContext.getUserId();
+		if (writerId == userId) {
+			return;
+		}
+
+		PostViewId postViewId = PostViewId.of(postId, userId);
+		if (postViewRepository.existsById(postViewId)) {
+			return;
+		}
+
+		Post postProxy = postRepository.getReferenceById(postId);
+		PostView postView = new PostView(postViewId);
+		postProxy.addPostView(postView);
+		postViewRepository.save(postView);
 	}
 
 	/**
@@ -257,6 +359,55 @@ public class PostService {
 			post.updateThumbnail(settingsDto.thumbnailUrl());
 			PostImgKafkaDto postImgKafkaDto = new PostImgKafkaDto(post.getId(), updateDto.settingsDto().thumbnailUrl());
 			kafkaService.sendMsg("post-thumbnail", postImgKafkaDto);
+		}
+	}
+
+	@Transactional
+	public boolean toggleLike(long postId) {
+		if (!postRepository.existsById(postId)) {
+			log.info("Post {} Not Found", postId);
+			throw new NotFoundException("Post Not Found");
+		}
+
+		if (!UserContext.isLogin()) {
+			throw new ForbiddenException("로그인 후 사용 가능합니다.");
+		}
+
+		long userId = UserContext.getUserId();
+		PostViewId postViewId = PostViewId.of(postId, userId);
+		PostView postView = postViewRepository.findById(postViewId)
+				.orElseThrow(() -> {
+						log.info("PostView {} Not Found", postViewId);
+						return new NotFoundException("PostViewId Found");
+				});
+
+		postView.toggleLike();
+		return postView.isLike();
+	}
+
+	@Transactional
+	public boolean togglePostMark(long postId) {
+		if (!postRepository.existsById(postId)) {
+			log.info("Post {} Not Found", postId);
+			throw new NotFoundException("Post Not Found");
+		}
+
+		if (!UserContext.isLogin()) {
+			throw new ForbiddenException("로그인 후 사용 가능합니다.");
+		}
+
+		long userId = UserContext.getUserId();
+		PostMarkId postMarkId = PostMarkId.of(postId, userId);
+		if (postMarkRepository.existsById(postMarkId)) {
+			PostMark postMark = postMarkRepository.getReferenceById(postMarkId);
+			postMarkRepository.delete(postMark);
+			return false;
+		} else {
+			PostMark postMark = new PostMark(postMarkId);
+			Post post = postRepository.getReferenceById(postId);
+			post.addPostMark(postMark);
+			postMarkRepository.save(postMark);
+			return true;
 		}
 	}
 
